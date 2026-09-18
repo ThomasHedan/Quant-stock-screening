@@ -1,0 +1,62 @@
+[project]
+name = "momentum-gap-scanner"
+version = "0.6.0"
+description = "Pre/post-market momentum gap scanner with a research data lake (screens, records, notifies — never trades)."
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["app", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+    "N",    # pep8-naming
+    "ANN",  # flake8-annotations — type hints on every signature (CLAUDE.md 1.1)
+    "S",    # flake8-bandit
+    "DTZ",  # flake8-datetimez — no naive datetimes (CLAUDE.md 1.1)
+    "T20",  # flake8-print — logging, never print (CLAUDE.md 1.1)
+    "RET",
+    "SIM",
+    "PTH",
+    "RUF",
+]
+ignore = [
+    "ANN401",  # Any is occasionally the honest annotation at a boundary
+    "B008",    # FastAPI Depends() in defaults is idiomatic
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+    "S101",    # assert is the point of a test
+    "ANN201",  # test functions returning None need no annotation noise
+    "ANN001",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers --strict-config"
+filterwarnings = ["error::DeprecationWarning:app.*"]
+markers = [
+    "slow: tests that hit disk or build large synthetic datasets",
+]
+
+[tool.mypy]
+python_version = "3.12"
+packages = ["app"]
+strict = true
+warn_unreachable = true
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = ["exchange_calendars.*", "pywebpush.*", "tradingview_screener.*", "duckdb.*"]
+ignore_missing_imports = true
