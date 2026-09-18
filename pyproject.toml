@@ -36,6 +36,11 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
+"research/*.ipynb" = [
+    "T201",    # a notebook prints its findings; that is the medium
+    "S608",    # the SQL is written in the notebook, from constants in it
+    "E501",    # SQL reads better aligned than wrapped at 100 columns
+]
 "tests/**" = [
     "S101",    # assert is the point of a test
     "S106",    # fake credentials in a redaction test are the point of that test
