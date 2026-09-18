@@ -68,3 +68,52 @@ was not enough.
 **Trade-off.** `pandas` and `pyarrow` are heavy, but both come with the required
 stack anyway. `core/` stays free of them so the pure logic remains trivially
 testable.
+
+---
+
+## 2026-09-18 — Pinned tooling notes for this build host
+
+**Context.** PyPI is reachable from this build environment only through the
+agent proxy; the default `no_proxy` sends pip direct, where it times out.
+
+**Decision.** Installs run as
+`env -u no_proxy -u NO_PROXY pip install --proxy "$HTTPS_PROXY" …`. Nothing in
+the application depends on this; it is a build-host note only, recorded so the
+next person does not conclude the package set is wrong.
+
+**Trade-off.** None for the app. The workaround is absent from
+`requirements.txt`, which stays portable.
+
+---
+
+## 2026-09-18 — Absent news is a pillar-3 FAIL, not UNKNOWN
+
+**Context.** §5.4 says missing data makes a pillar *unknown*. Pillar 3 is a
+special case: "no article in the last 15 minutes" can mean either *there is no
+catalyst* or *the feed is down*, and those deserve opposite verdicts.
+
+**Decision.** `check_news_catalyst(None, …)` returns `FAIL`, documented as "a
+connected, quiet feed is information". A caller that knows the feed was
+disconnected must not call it and must record the pillar `unknown` itself;
+WebSocket downtime is already tracked in `data_quality` (§6.6), so the caller
+always has the information it needs to tell the two apart.
+
+**Trade-off.** A caller that forgets to check feed health will record a false
+`FAIL` during an outage. That is the safer direction — it suppresses alerts
+rather than inventing them — and the outage is visible in `data_quality`.
+
+---
+
+## 2026-09-18 — rank_score renormalises over the components present
+
+**Context.** §5.2 defines `rank_score` as a fixed weighted sum of three ranks.
+Early in a window, RVOL is often still `None` for tickers whose baseline has not
+been computed yet.
+
+**Decision.** Missing components are dropped and the remaining weights are
+rescaled, rather than substituting a rank of zero.
+
+**Trade-off.** Scores computed from different component sets are not strictly
+comparable. Substituting zero was worse: it would push exactly the newest,
+fastest-moving names to the bottom of the table, which is the opposite of what
+the ranking exists for. Rows record which components were present.

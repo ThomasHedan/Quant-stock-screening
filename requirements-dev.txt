@@ -1,0 +1,7 @@
+# Development gates: ruff and pytest must pass before every commit, and mypy
+# must be clean (CLAUDE.md 1.1).
+-r requirements.txt
+mypy>=1.10
+pytest>=8
+ruff>=0.5
+types-PyYAML
