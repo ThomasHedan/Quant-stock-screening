@@ -273,3 +273,34 @@ of the page still parses.
 verify on a networked machine: the exact `corporate_actions` response keys, and
 whether the free tier's 15-minute delay applies to this endpoint as it does to
 market data.
+
+---
+
+## 2026-09-18 — `pytz` is pinned because DuckDB needs it for TIMESTAMPTZ
+
+**Context.** Every lake timestamp is `TIMESTAMP WITH TIME ZONE`. Returning one
+to Python from DuckDB raises `ModuleNotFoundError: pytz` — the driver converts
+through `pytz` and does not declare it as a hard dependency.
+
+**Decision.** `pytz` is listed in `requirements.txt` with this note. No
+application code imports it; storing naive timestamps to avoid it was never an
+option, since the whole codebase depends on timezone-aware UTC.
+
+**Trade-off.** One more package, needed only by `/research` queries that select
+a timestamp column — which is most of them.
+
+---
+
+## 2026-09-18 — The research query timeout is a watchdog interrupt
+
+**Context.** §6.7 requires a 10-second timeout on the DuckDB query box. DuckDB
+has no `statement_timeout` setting.
+
+**Decision.** The query runs with a `threading.Timer` that calls
+`connection.interrupt()` when the limit expires; the interrupt surfaces as a
+rejected query with a clear message.
+
+**Trade-off.** The timer fires against the whole connection rather than one
+statement, which is exactly the granularity wanted here (one connection per
+request). Without it, one careless join over a year of snapshots would hold the
+page open indefinitely.

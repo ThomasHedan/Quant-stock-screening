@@ -11,6 +11,7 @@ pyarrow>=16
 pydantic>=2.7
 pydantic-settings>=2.2
 pywebpush>=2.0
+pytz>=2024.1          # duckdb needs it to return TIMESTAMPTZ values to Python
 pyyaml>=6.0
 tradingview-screener>=2.5
 uvicorn[standard]>=0.30
