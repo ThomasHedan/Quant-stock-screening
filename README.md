@@ -37,7 +37,7 @@ committed, tested and tagged (`step-00`, `step-01`, …).
 | 7 | Live / History / Settings pages | ✅ |
 | 8 | Alpaca bars: RVOL baseline, outcomes | ✅ |
 | 9 | Runner detection, Missed Runners page | ✅ |
-| 10 | Trade journal | ⏳ |
+| 10 | Trade journal | ✅ |
 | 11 | Research page, starter notebook, mock mode | ⏳ |
 
 ## Requirements
