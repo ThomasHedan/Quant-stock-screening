@@ -21,7 +21,8 @@ rationale: [`DECISIONS.md`](DECISIONS.md).
 ## Status
 
 All eleven build-order steps are implemented, tested and tagged
-(`step-00` … `step-11`).
+(`step-00` … `step-11`), plus the job wiring that turns them into a running
+system (`step-12`).
 
 | Step | Scope | State |
 |---|---|---|
@@ -39,6 +40,7 @@ All eleven build-order steps are implemented, tested and tagged
 | 9 | Runner detection, Missed Runners page | ✅ |
 | 10 | Trade journal | ✅ |
 | 11 | Research page, starter notebook, mock mode | ✅ |
+| 12 | Daily job chain wired to the scheduler | ✅ |
 
 **Not yet verified against the live APIs.** This build ran in an environment
 with no access to `scanner.tradingview.com`, `api.alpaca.markets` or
