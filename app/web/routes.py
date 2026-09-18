@@ -13,7 +13,7 @@ Nothing here places an order, and nothing here gives advice.
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -22,12 +22,13 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
+from app import recent_runners
 from app.alerts import Evaluation
 from app.core.timeutils import UTC, to_et, to_utc
 from app.core.types import PillarStatus, Tier
 from app.notify import push
 from app.runtime import RuntimeState
-from app.storage import db
+from app.storage import db, lake
 
 logger = logging.getLogger(__name__)
 
@@ -245,28 +246,87 @@ def settings_page(request: Request) -> HTMLResponse:
 
 
 @router.get("/runners", response_class=HTMLResponse)
-def runners_page(request: Request) -> HTMLResponse:
-    """Missed Runners — arrives with build-order step 9.
+def runners_page(request: Request, day: str | None = None) -> HTMLResponse:
+    """Missed Runners: what ran, whether it was caught, and why not.
 
-    A stub rather than a missing route: the navigation is part of the app's
-    shape, and a 404 from your own menu reads as a bug rather than as work in
-    progress.
+    Reads the ``runners`` partition written by the 20:15 job. A day with no
+    partition yet shows an explanation rather than an empty table, because
+    "nothing ran" and "the job has not run" are opposite findings.
     """
     state = state_of(request)
     now = datetime.now(tz=UTC)
+    trade_date = date.fromisoformat(day) if day else to_et(now).date()
+
+    rows: list[dict[str, Any]] = []
+    partition_exists = lake.partition_path(
+        state.config.storage.lake_path, "runners", trade_date
+    ).exists()
+    if partition_exists:
+        rows = lake.read_day(state.config.storage.lake_path, "runners", trade_date).to_pylist()
+
+    with db.session(state.sqlite_path) as connection:
+        watchlist = recent_runners.active(connection, today=trade_date)
+
+    caught = sum(1 for row in rows if "CAUGHT" in (row.get("miss_reasons") or []))
+    reason_counts: dict[str, int] = {}
+    for row in rows:
+        for reason in row.get("miss_reasons") or []:
+            reason_counts[reason] = reason_counts.get(reason, 0) + 1
+
     return templates().TemplateResponse(
         request,
-        "placeholder.html",
+        "runners.html",
         {
-            "page_title": "Missed Runners",
-            "explanation": (
-                "End-of-day runner detection and miss-reason diagnosis land in build step 9. "
-                "Every evaluation is already being recorded, so the analysis will cover the "
-                "days collected before the page exists."
+            "trade_date": trade_date.isoformat(),
+            "runners": sorted(
+                rows, key=lambda row: row.get("high_of_day_pct") or 0.0, reverse=True
             ),
+            "partition_exists": partition_exists,
+            "caught": caught,
+            "missed": len(rows) - caught,
+            "reason_counts": sorted(reason_counts.items(), key=lambda item: -item[1]),
+            "watchlist": [
+                {
+                    "ticker": entry.ticker,
+                    "badge": entry.badge(today=trade_date),
+                    "pinned": entry.pinned,
+                    "headline": entry.headline,
+                }
+                for entry in watchlist
+            ],
             **header_context(state, now=now),
         },
     )
+
+
+class WatchlistPayload(BaseModel):
+    """A manual watchlist change from the UI."""
+
+    ticker: str = Field(min_length=1, max_length=12)
+
+
+@router.post("/api/watchlist/pin")
+def watchlist_pin(request: Request, payload: WatchlistPayload) -> JSONResponse:
+    """Pin a ticker so it survives watchlist expiry."""
+    state = state_of(request)
+    with db.session(state.sqlite_path) as connection:
+        changed = recent_runners.pin(connection, payload.ticker.upper())
+        state.set_recent_runners(
+            recent_runners.tickers(connection, today=to_et(datetime.now(tz=UTC)).date())
+        )
+    return JSONResponse({"pinned": bool(changed), "ticker": payload.ticker.upper()})
+
+
+@router.post("/api/watchlist/remove")
+def watchlist_remove(request: Request, payload: WatchlistPayload) -> JSONResponse:
+    """Drop a ticker from the watchlist."""
+    state = state_of(request)
+    with db.session(state.sqlite_path) as connection:
+        removed = recent_runners.remove(connection, payload.ticker.upper())
+        state.set_recent_runners(
+            recent_runners.tickers(connection, today=to_et(datetime.now(tz=UTC)).date())
+        )
+    return JSONResponse({"removed": bool(removed), "ticker": payload.ticker.upper()})
 
 
 @router.get("/research", response_class=HTMLResponse)

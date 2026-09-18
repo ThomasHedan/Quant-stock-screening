@@ -230,6 +230,82 @@ def test_navigation_links_all_resolve(client):
         assert client.get(path).status_code == 200, path
 
 
-def test_placeholder_pages_say_what_is_coming(client):
-    assert "build step 9" in client.get("/runners").text
+def test_the_research_placeholder_says_what_is_coming(client):
     assert "build step 11" in client.get("/research").text
+
+
+# --- missed runners ----------------------------------------------------------
+
+
+def test_runners_page_distinguishes_no_job_from_no_runners(client):
+    """'Nothing ran' and 'the job has not run' are opposite findings."""
+    body = client.get("/runners?day=2026-03-10").text
+    assert "No runner analysis" in body
+    assert "20:15 ET job" in body
+
+
+def test_runners_page_lists_a_written_partition(app, client):
+    from datetime import date
+
+    from app.storage import lake
+
+    state = app.state.runtime
+    day = date(2026, 3, 10)
+    writer = lake.LakeWriter(root=state.config.storage.lake_path, source="alpaca")
+    writer.append(
+        "runners",
+        day,
+        {
+            "ticker": "RUNNR",
+            "date": day,
+            "high_of_day_pct": 84.0,
+            "move_start_utc": NOW,
+            "first_news_utc": None,
+            "news_lag_minutes": None,
+            "best_tier": "none",
+            "best_tier_ts_utc": None,
+            "price_at_move_start": 4.10,
+            "float_shares": 23_000_000,
+            "dollar_volume": 8_000_000.0,
+            "miss_reasons": ["OUTSIDE_WINDOW", "FAILED_PILLAR", "NEAR_MISS"],
+            "miss_detail": "move started 07:20 ET, outside every alert window",
+            "qualifying_rule": "high of day +84% vs prev close",
+            "written_at_utc": NOW,
+        },
+    )
+    writer.flush(now=NOW)
+
+    body = client.get("/runners?day=2026-03-10").text
+    assert "RUNNR" in body
+    assert "OUTSIDE_WINDOW" in body
+    assert "NEAR_MISS" in body
+    assert "1 runner(s): 0 caught, 1 missed" in body
+
+
+def test_watchlist_pin_and_remove_round_trip(app, client):
+    from datetime import date
+
+    from app import recent_runners
+    from app.recent_runners import RecentRunner
+    from app.storage import db
+
+    state = app.state.runtime
+    with db.session(state.sqlite_path) as connection:
+        recent_runners.add(
+            connection,
+            RecentRunner(
+                ticker="ABCD",
+                run_date=date(2026, 3, 6),
+                high_pct=84.0,
+                float_shares=4_100_000,
+                headline="Phase 3 data",
+                expires_on=date(2026, 3, 13),
+            ),
+        )
+
+    assert client.post("/api/watchlist/pin", json={"ticker": "abcd"}).json()["pinned"] is True
+    assert client.post("/api/watchlist/remove", json={"ticker": "ABCD"}).json()["removed"] is True
+
+
+def test_watchlist_rejects_a_bogus_ticker(client):
+    assert client.post("/api/watchlist/pin", json={"ticker": ""}).status_code == 422

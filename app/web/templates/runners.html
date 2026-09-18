@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Missed Runners · Momentum Gap Scanner{% endblock %}
+{% block content %}
+<h1>Missed Runners</h1>
+
+<form method="get" action="/runners" class="controls">
+  <label for="day">Date</label>
+  <input type="date" id="day" name="day" value="{{ trade_date }}">
+  <button type="submit">Show</button>
+</form>
+
+{% if not partition_exists %}
+  {# "Nothing ran" and "the job has not run" are opposite findings. #}
+  <p class="empty">No runner analysis for {{ trade_date }} yet. It is written by the
+    20:15 ET job, once the day's bars are available.</p>
+{% elif not runners %}
+  <p class="empty">No stock met the runner definition on {{ trade_date }}.</p>
+{% else %}
+
+<p class="meta">{{ runners | length }} runner(s): {{ caught }} caught, {{ missed }} missed.</p>
+
+<table class="runners">
+  <thead>
+    <tr>
+      <th>Ticker</th><th>High</th><th>Move start</th><th>Best tier</th>
+      <th>Float</th><th>News lag</th><th>Why</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for runner in runners %}
+    <tr class="{{ 'caught' if 'CAUGHT' in (runner.miss_reasons or []) else 'missed' }}">
+      <td class="ticker">{{ runner.ticker }}</td>
+      <td>{{ runner.high_of_day_pct | pct(0) }}</td>
+      <td>{{ runner.move_start_utc | et }}</td>
+      <td class="tier">{{ runner.best_tier if runner.best_tier != 'none' else '—' }}</td>
+      <td>{{ runner.float_shares | num(1) }}</td>
+      <td>
+        {%- if runner.news_lag_minutes is not none -%}
+          {{ runner.news_lag_minutes | round(0) | int }} min
+        {%- else -%}—{%- endif -%}
+      </td>
+      <td class="reasons">
+        {% for reason in runner.miss_reasons or [] %}
+          <span class="chip chip-{{ reason }}" title="{{ runner.miss_detail }}">{{ reason }}</span>
+        {% endfor %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<section>
+  <h2>Miss reasons</h2>
+  <ul class="reason-counts">
+    {% for reason, count in reason_counts %}
+      <li><span class="chip chip-{{ reason }}">{{ reason }}</span> {{ count }}</li>
+    {% endfor %}
+  </ul>
+  <p class="meta">A runner can carry several reasons. Threshold what-ifs always report both
+     numbers — extra runners caught <em>and</em> extra alerts that did not run — and never
+     change a threshold on their own. That decision stays in Settings.</p>
+</section>
+{% endif %}
+
+<section>
+  <h2>Watchlist</h2>
+  {% if not watchlist %}
+    <p class="empty">No recent runners. Entries expire after five trading days unless pinned.</p>
+  {% else %}
+  <ul class="watchlist">
+    {% for entry in watchlist %}
+      <li>
+        <b>{{ entry.ticker }}</b>
+        <span class="badge runner">{{ entry.badge }}</span>
+        {% if entry.pinned %}<span class="badge">pinned</span>{% endif %}
+        {% if entry.headline %}<span class="meta">{{ entry.headline }}</span>{% endif %}
+        <button type="button" data-pin="{{ entry.ticker }}">
+          {{ "Unpin" if entry.pinned else "Pin" }}
+        </button>
+        <button type="button" data-remove="{{ entry.ticker }}">Remove</button>
+      </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+
+<script type="module">
+  const post = async (path, ticker) => {
+    await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ticker }),
+    });
+    window.location.reload();
+  };
+
+  document.querySelectorAll('[data-pin]').forEach((button) => {
+    button.addEventListener('click', () => post('/api/watchlist/pin', button.dataset.pin));
+  });
+  document.querySelectorAll('[data-remove]').forEach((button) => {
+    button.addEventListener('click', () => post('/api/watchlist/remove', button.dataset.remove));
+  });
+</script>
+{% endblock %}

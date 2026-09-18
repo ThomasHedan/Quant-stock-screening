@@ -153,3 +153,29 @@ footer {
   main { max-width: 1100px; margin: 0 auto; }
   table { font-size: 0.9rem; }
 }
+
+/* Missed Runners ---------------------------------------------------------- */
+
+.chip {
+  display: inline-block;
+  font-size: 0.65rem;
+  padding: 0.05rem 0.3rem;
+  margin: 0 0.15rem 0.15rem 0;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  white-space: nowrap;
+}
+/* The reason colours carry the same meaning as the pillar dots: amber for
+   "a threshold was close", red for "we never saw it", green for caught. */
+.chip-NEAR_MISS, .chip-NEWS_LATE { border-color: var(--tier-b); color: var(--tier-b); }
+.chip-NOT_IN_UNIVERSE, .chip-DATA_MISSING { border-color: var(--down); color: var(--down); }
+.chip-CAUGHT { border-color: var(--up); color: var(--up); }
+
+tr.caught .ticker { color: var(--up); }
+.reasons { text-align: left; }
+.reason-counts { list-style: none; padding: 0; }
+.reason-counts li { padding: 0.15rem 0; }
+.watchlist { list-style: none; padding: 0; }
+.watchlist li { padding: 0.35rem 0; border-bottom: 1px solid var(--line); }
+.watchlist .meta { display: block; }
