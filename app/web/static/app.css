@@ -179,3 +179,16 @@ tr.caught .ticker { color: var(--up); }
 .watchlist { list-style: none; padding: 0; }
 .watchlist li { padding: 0.35rem 0; border-bottom: 1px solid var(--line); }
 .watchlist .meta { display: block; }
+
+/* Journal ----------------------------------------------------------------- */
+
+.journal-actions { white-space: nowrap; }
+button.tap {
+  padding: 0.15rem 0.35rem;
+  margin: 0 0.1rem 0 0;
+  font-size: 0.7rem;
+  min-width: 1.6rem;
+}
+.action-traded { color: var(--up); font-weight: 700; }
+.action-skipped { color: var(--muted); }
+.action-watched { color: var(--tier-watch); }

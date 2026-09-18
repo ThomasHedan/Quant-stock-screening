@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Journal · Momentum Gap Scanner{% endblock %}
+{% block content %}
+<h1>Journal</h1>
+
+<form method="get" action="/journal" class="controls">
+  <label for="day">Date</label>
+  <input type="date" id="day" name="day" value="{{ trade_date }}">
+  <button type="submit">Show</button>
+</form>
+
+{% if not entries %}
+  <p class="empty">Nothing logged on {{ trade_date }}. Use the Traded / Skipped buttons on the
+    Live and Missed Runners pages — one tap each, while you are watching anyway.</p>
+{% else %}
+<table class="journal">
+  <thead>
+    <tr><th>Time</th><th>Ticker</th><th>Action</th><th>Entry</th><th>Exit</th>
+        <th>Size</th><th>P&amp;L</th><th>Note</th></tr>
+  </thead>
+  <tbody>
+  {% for entry in entries %}
+    <tr>
+      <td>{{ entry.created_at_utc | et }}</td>
+      <td class="ticker">{{ entry.ticker }}</td>
+      <td class="action-{{ entry.action }}">{{ entry.action }}</td>
+      <td>{{ entry.entry | num }}</td>
+      <td>{{ entry.exit | num }}</td>
+      <td>{{ entry.size | num(0) }}</td>
+      <td class="{{ 'up' if entry.pnl and entry.pnl > 0 else ('down' if entry.pnl and entry.pnl < 0 else '') }}">
+        {{ entry.pnl | num }}
+      </td>
+      <td class="headline">{{ entry.note or "—" }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="caveat-note">
+  P&amp;L is entry to exit times size, with no fees or slippage — a memory aid, not an
+  accounting figure. Journal entries are never used to tune thresholds.
+</p>
+{% endif %}
+{% endblock %}

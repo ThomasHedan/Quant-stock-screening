@@ -1,5 +1,37 @@
 {% extends "base.html" %}
-{% block title %}Live · Momentum Gap Scanner{% endblock %}
+{% block title %}Live · Momentum Gap Scanner
+{# Delegated on the document, not the row: HTMX replaces the table every 10 s
+   and per-button listeners would die with it. #}
+<script type="module">
+  document.addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-journal]');
+    if (!button) return;
+
+    const action = button.dataset.journal;
+    const ticker = button.dataset.ticker;
+    let note = null;
+    if (action === 'watched') {
+      note = window.prompt(`Note for ${ticker}`);
+      if (note === null) return;
+    }
+
+    button.disabled = true;
+    try {
+      const response = await fetch('/api/journal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticker, action, note }),
+      });
+      button.textContent = response.ok ? '✓' : '!';
+    } catch (error) {
+      button.textContent = '!';
+      button.title = error.message;
+    } finally {
+      button.disabled = false;
+    }
+  });
+</script>
+{% endblock %}
 {% block content %}
 <h1>Live</h1>
 <p class="meta">
@@ -12,4 +44,36 @@
 <div hx-get="/api/live" hx-trigger="every 10s" hx-swap="outerHTML">
   {% include "_live_table.html" %}
 </div>
+
+{# Delegated on the document, not the row: HTMX replaces the table every 10 s
+   and per-button listeners would die with it. #}
+<script type="module">
+  document.addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-journal]');
+    if (!button) return;
+
+    const action = button.dataset.journal;
+    const ticker = button.dataset.ticker;
+    let note = null;
+    if (action === 'watched') {
+      note = window.prompt(`Note for ${ticker}`);
+      if (note === null) return;
+    }
+
+    button.disabled = true;
+    try {
+      const response = await fetch('/api/journal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticker, action, note }),
+      });
+      button.textContent = response.ok ? '✓' : '!';
+    } catch (error) {
+      button.textContent = '!';
+      button.title = error.message;
+    } finally {
+      button.disabled = false;
+    }
+  });
+</script>
 {% endblock %}

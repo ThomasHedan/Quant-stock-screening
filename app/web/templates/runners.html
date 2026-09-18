@@ -23,7 +23,7 @@
   <thead>
     <tr>
       <th>Ticker</th><th>High</th><th>Move start</th><th>Best tier</th>
-      <th>Float</th><th>News lag</th><th>Why</th>
+      <th>Float</th><th>News lag</th><th>Why</th><th>Log</th>
     </tr>
   </thead>
   <tbody>
@@ -43,6 +43,14 @@
         {% for reason in runner.miss_reasons or [] %}
           <span class="chip chip-{{ reason }}" title="{{ runner.miss_detail }}">{{ reason }}</span>
         {% endfor %}
+      </td>
+      <td class="journal-actions">
+        <button type="button" class="tap" data-journal="traded"
+                data-ticker="{{ runner.ticker }}" title="Log as traded">T</button>
+        <button type="button" class="tap" data-journal="skipped"
+                data-ticker="{{ runner.ticker }}" title="Log as skipped">S</button>
+        <button type="button" class="tap" data-journal="watched"
+                data-ticker="{{ runner.ticker }}" title="Log a note">N</button>
       </td>
     </tr>
   {% endfor %}
@@ -93,6 +101,24 @@
     });
     window.location.reload();
   };
+
+  document.addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-journal]');
+    if (!button) return;
+    const action = button.dataset.journal;
+    const ticker = button.dataset.ticker;
+    let note = null;
+    if (action === 'watched') {
+      note = window.prompt(`Note for ${ticker}`);
+      if (note === null) return;
+    }
+    const response = await fetch('/api/journal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ticker, action, note, trade_date: '{{ trade_date }}' }),
+    });
+    button.textContent = response.ok ? '✓' : '!';
+  });
 
   document.querySelectorAll('[data-pin]').forEach((button) => {
     button.addEventListener('click', () => post('/api/watchlist/pin', button.dataset.pin));

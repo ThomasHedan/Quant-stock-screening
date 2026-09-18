@@ -14,7 +14,7 @@
     <thead>
       <tr>
         <th>Ticker</th><th>Price</th><th>Gap</th><th>Win</th><th>RVOL</th>
-        <th>Float</th><th>Pillars</th><th>Tier</th><th>Catalyst</th>
+        <th>Float</th><th>Pillars</th><th>Tier</th><th>Catalyst</th><th>Log</th>
       </tr>
     </thead>
     <tbody>
@@ -45,6 +45,15 @@
             {% if row.news_url %}<a href="{{ row.news_url }}" rel="noopener noreferrer" target="_blank">{{ row.headline }}</a>
             {% else %}{{ row.headline }}{% endif %}
           {% else %}—{% endif %}
+        </td>
+        {# One tap, no dialog: anything heavier will not get used mid-window. #}
+        <td class="journal-actions">
+          <button type="button" class="tap" data-journal="traded" data-ticker="{{ row.ticker }}"
+                  title="Log as traded">T</button>
+          <button type="button" class="tap" data-journal="skipped" data-ticker="{{ row.ticker }}"
+                  title="Log as skipped">S</button>
+          <button type="button" class="tap" data-journal="watched" data-ticker="{{ row.ticker }}"
+                  title="Log a note">N</button>
         </td>
       </tr>
     {% endfor %}

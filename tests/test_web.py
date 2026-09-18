@@ -309,3 +309,63 @@ def test_watchlist_pin_and_remove_round_trip(app, client):
 
 def test_watchlist_rejects_a_bogus_ticker(client):
     assert client.post("/api/watchlist/pin", json={"ticker": ""}).status_code == 422
+
+
+# --- journal -----------------------------------------------------------------
+
+
+def test_journal_entry_takes_one_post(client):
+    response = client.post("/api/journal", json={"ticker": "abcd", "action": "traded"})
+    assert response.status_code == 200
+    assert response.json()["ticker"] == "ABCD"
+
+
+def test_journal_rejects_an_unknown_action(client):
+    assert client.post("/api/journal", json={"ticker": "ABCD", "action": "yolo"}).status_code == 422
+
+
+def test_journal_page_lists_the_days_entries(client):
+    client.post(
+        "/api/journal",
+        json={
+            "ticker": "ABCD",
+            "action": "traded",
+            "entry": 5.2,
+            "exit": 6.1,
+            "size": 500,
+            "note": "held through the open",
+        },
+    )
+    from datetime import datetime as _dt
+
+    from app.core.timeutils import to_et
+
+    today = to_et(_dt.now(tz=UTC)).date().isoformat()
+    body = client.get(f"/journal?day={today}").text
+    assert "ABCD" in body
+    assert "held through the open" in body
+    assert "450.00" in body  # (6.10 - 5.20) * 500
+
+
+def test_journal_page_says_how_to_log_when_empty(client):
+    body = client.get("/journal?day=2026-03-10").text
+    assert "one tap each" in body
+
+
+def test_journal_page_disclaims_the_pnl_figure(client):
+    client.post("/api/journal", json={"ticker": "ABCD", "action": "traded"})
+    from datetime import datetime as _dt
+
+    from app.core.timeutils import to_et
+
+    today = to_et(_dt.now(tz=UTC)).date().isoformat()
+    body = client.get(f"/journal?day={today}").text
+    assert "no fees or slippage" in body
+    assert "never used to tune thresholds" in body
+
+
+def test_live_rows_carry_one_tap_journal_buttons(app, client):
+    seed_evaluation(app)
+    body = client.get("/api/live").text
+    assert 'data-journal="traded"' in body
+    assert 'data-journal="skipped"' in body

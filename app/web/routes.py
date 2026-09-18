@@ -22,10 +22,11 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
-from app import recent_runners
+from app import journal, recent_runners
 from app.alerts import Evaluation
 from app.core.timeutils import UTC, to_et, to_utc
 from app.core.types import PillarStatus, Tier
+from app.journal import JournalAction, JournalEntry
 from app.notify import push
 from app.runtime import RuntimeState
 from app.storage import db, lake
@@ -361,6 +362,81 @@ def healthz(request: Request) -> JSONResponse:
             "sources": [{"name": s.name, "healthy": s.healthy} for s in state.statuses(now=now)],
             "warnings": state.warnings,
         }
+    )
+
+
+# --- journal API -------------------------------------------------------------
+
+
+class JournalPayload(BaseModel):
+    """A one-tap journal entry from a live row or a runner row.
+
+    Only ticker and action are required: the whole point is that logging a
+    decision costs one tap mid-window, with the numbers optional and addable
+    later (CLAUDE.md 7.5).
+    """
+
+    ticker: str = Field(min_length=1, max_length=12)
+    action: JournalAction
+    alert_id: str | None = None
+    trade_date: date | None = None
+    entry: float | None = None
+    exit: float | None = None
+    size: float | None = None
+    note: str | None = Field(default=None, max_length=2000)
+    tags: list[str] = Field(default_factory=list)
+
+
+@router.post("/api/journal")
+def record_journal(request: Request, payload: JournalPayload) -> JSONResponse:
+    """Record one journal entry."""
+    state = state_of(request)
+    now = datetime.now(tz=UTC)
+    entry = JournalEntry(
+        ticker=payload.ticker.upper(),
+        trade_date=payload.trade_date or to_et(now).date(),
+        action=payload.action,
+        alert_id=payload.alert_id,
+        entry=payload.entry,
+        exit=payload.exit,
+        size=payload.size,
+        note=payload.note,
+        tags=tuple(payload.tags),
+    )
+    with db.session(state.sqlite_path) as connection:
+        entry_id = journal.record(connection, entry, now=now)
+    return JSONResponse({"id": entry_id, "ticker": entry.ticker, "action": entry.action.value})
+
+
+@router.get("/journal", response_class=HTMLResponse)
+def journal_page(request: Request, day: str | None = None) -> HTMLResponse:
+    """The day's journal entries, with realised P&L where a trade was closed."""
+    state = state_of(request)
+    now = datetime.now(tz=UTC)
+    trade_date = date.fromisoformat(day) if day else to_et(now).date()
+    with db.session(state.sqlite_path) as connection:
+        entries = journal.for_day(connection, trade_date)
+    return templates().TemplateResponse(
+        request,
+        "journal.html",
+        {
+            "trade_date": trade_date.isoformat(),
+            "entries": [
+                {
+                    "ticker": entry.ticker,
+                    "action": entry.action.value,
+                    "entry": entry.entry,
+                    "exit": entry.exit,
+                    "size": entry.size,
+                    "note": entry.note,
+                    "tags": list(entry.tags),
+                    "pnl": journal.realised_pnl(entry),
+                    "created_at_utc": entry.created_at_utc,
+                }
+                for entry in entries
+            ],
+            **header_context(state, now=now),
+        },
     )
 
 
