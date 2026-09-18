@@ -1,0 +1,147 @@
+# Momentum Gap Scanner — every threshold, window, cadence and cap lives here.
+# CLAUDE.md 1.1: if a number appears in a function body, it belongs in this file.
+#
+# All times are America/New_York (ET) wall-clock; storage and computation are
+# UTC internally.
+
+schema_version: 1
+
+timezones:
+  market: America/New_York
+  display: Europe/Paris
+
+calendar:
+  exchange: XNYS          # NYSE calendar: holidays and early closes
+
+sessions:
+  # ET wall-clock bounds of each session, used for daily_universe rollups.
+  pre: ["04:00", "09:30"]
+  regular: ["09:30", "16:00"]
+  post: ["16:00", "20:00"]
+
+schedules:
+  news_listener: ["04:00", "20:00"]
+  collector:
+    hot:
+      interval_seconds: 60
+      windows:
+        - ["07:00", "10:30"]
+        - ["15:30", "17:00"]
+    cold:
+      interval_seconds: 300
+      windows:
+        - ["04:00", "07:00"]
+        - ["10:30", "15:30"]
+        - ["17:00", "20:00"]
+  alert_windows:
+    interval_seconds: 30
+    windows:
+      - ["08:00", "08:05"]
+      - ["08:30", "08:35"]
+      - ["09:00", "09:05"]
+      - ["16:00", "16:05"]
+      - ["16:30", "16:35"]
+  jobs:
+    premarket_outcomes: "11:05"
+    daily_digest_push: "11:10"
+    corporate_actions: "20:10"
+    full_day_outcomes: "20:15"
+    data_quality_and_compaction: "20:45"
+
+pillars:
+  gap_pct_min: 10.0             # pillar 1: up on the day
+  rvol_min: 5.0                 # pillar 2: relative volume
+  news_fresh_minutes: 15        # pillar 3: catalyst freshness
+  price_min: 2.00               # pillar 4
+  price_max: 20.00              # pillar 4
+  float_shares_max: 20000000    # pillar 5
+
+rvol:
+  baseline_days: 10             # trading days averaged at the same ET minute
+  fallback_session_fraction: 0.05   # share of an average day traded by 08:05
+  cache_table: rvol_baseline
+
+ranking:
+  # rank_score = w_window * rank(window_change_pct)
+  #            + w_rvol   * rank(rvol)
+  #            + w_gap    * rank(gap_pct)
+  window_change_weight: 0.5
+  rvol_weight: 0.3
+  gap_weight: 0.2
+
+alerts:
+  tier_b_push_enabled: true
+  max_pushes_per_window: 5
+  daily_digest_enabled: true
+
+news:
+  backfill_minutes: 60          # re-read on startup / reconnect
+  today_start_et: "04:00"
+  premarket_today_start_prev_day_et: "16:00"
+  finnhub_max_calls_per_minute: 60
+  feed_latency_p95_warn_seconds: 60
+
+collector:
+  # Deliberately loose — see CLAUDE.md 6.0. Do NOT tighten to the alert
+  # thresholds; the lake needs the stocks that went nowhere as a denominator.
+  min_abs_change_pct: 3.0
+  min_volume_ratio: 2.0
+  top_dollar_volume_n: 100
+  min_price: 0.50
+
+retention:
+  move_threshold_pct: 25.0      # mover classification, up and down
+  control_sample_pct: 10        # deterministic sha256(ticker+date) % 100
+  max_lake_gb: 25
+  lake_warn_fraction: 0.80
+  bars_1m_raw_days: 90
+  bars_1m_thinned_minutes: 5
+  snapshots_months: 18
+
+integrity:
+  suspect_price_change: 0.80        # |price/prev_close - 1| above this is suspect
+  halt_min_silent_minutes: 3        # zero trades for N minutes -> inferred halt
+  float_turnover_low_confidence: 10.0
+  float_asof_max_age_days: 90
+
+tradability:
+  min_tradeable_dollar_volume: 50000.0
+  max_tradeable_spread_pct: 2.0
+  window_minutes: 5                 # dollar volume measured over N min after ref
+
+outcomes:
+  reference_times_et: ["08:05", "08:35", "09:05", "09:30", "16:05", "16:35"]
+  forward_minutes: [5, 15, 30, 60]
+  max_bar_tickers: 300
+  session_change_min_pct: 10.0      # bar-fetch scope: reached this at any poll
+
+runners:
+  high_of_day_pct_min: 50.0
+  intraday_move_pct_min: 30.0
+  intraday_lookback_minutes: 15
+  intraday_window_et: ["04:00", "11:00"]
+  postmarket_move_pct_min: 30.0
+  min_price: 1.00
+  min_dollar_volume: 1000000.0
+  move_start_trigger_pct: 10.0
+  near_miss_fraction: 0.20          # failed pillar within 20% of threshold
+  recent_runner_days: 5
+  top_gainers_n: 100
+
+research:
+  holdout_fraction: 0.30            # most recent 30% of history, untouched
+  sql_timeout_seconds: 10
+  sql_row_cap: 10000
+
+http:
+  timeout_seconds: 10
+  connect_timeout_seconds: 5
+  max_retries: 3
+  backoff_base_seconds: 1.0
+  backoff_max_seconds: 30.0
+
+storage:
+  lake_path: data/lake
+  sqlite_path: data/app.db
+  flush_interval_seconds: 300
+  parquet_compression: zstd
