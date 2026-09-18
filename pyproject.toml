@@ -61,5 +61,11 @@ warn_unreachable = true
 disallow_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = ["exchange_calendars.*", "pywebpush.*", "tradingview_screener.*", "duckdb.*"]
+module = [
+    "exchange_calendars.*",
+    "pywebpush.*",
+    "tradingview_screener.*",
+    "duckdb.*",
+    "pyarrow.*",   # ships no py.typed marker
+]
 ignore_missing_imports = true
