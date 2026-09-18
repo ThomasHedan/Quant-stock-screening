@@ -25,6 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app import alerts as alert_pipeline
+from app import jobs
 from app.collector import snapshot_rows
 from app.config import AppConfig, get_secrets, load_config
 from app.core.collection import CollectionFilter
@@ -203,16 +204,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         try:
             from app.scheduler import build_daily_jobs, start
 
-            handlers = {
-                name: _placeholder_job(name)
-                for name in (
-                    "premarket_outcomes",
-                    "daily_digest_push",
-                    "corporate_actions",
-                    "full_day_outcomes",
-                    "data_quality_and_compaction",
-                )
-            }
+            handlers = _daily_handlers(state)
             scheduler = start(
                 config,
                 state.calendar,
@@ -298,14 +290,61 @@ def _tick(state: RuntimeState, now: datetime) -> None:
         logger.exception("Tick failed at %s", to_utc(now).isoformat())
 
 
-def _placeholder_job(name: str) -> Callable[[datetime], None]:
-    """A daily job that is scheduled but not yet implemented.
+def _daily_handlers(state: RuntimeState) -> dict[str, Callable[[datetime], None]]:
+    """Bind each scheduled daily job to the code that does the work.
 
-    Registered rather than omitted so the schedule is visible and correct from
-    the start; each one is replaced as its build-order step lands.
+    Every handler is wrapped so a failure is logged and surfaced on the
+    dashboard instead of killing the scheduler thread: an unattended scanner
+    that died at 20:15 loses the whole evening, and the next morning looks
+    entirely normal.
     """
 
-    def run(now: datetime) -> None:
-        logger.info("Daily job %s fired at %s (not yet implemented)", name, to_utc(now).isoformat())
+    def guarded(name: str, run: Callable[[datetime], object]) -> Callable[[datetime], None]:
+        def handler(now: datetime) -> None:
+            started = to_utc(now)
+            logger.info("Daily job %s starting at %s", name, started.isoformat())
+            try:
+                run(started)
+            except Exception as exc:
+                state.warn(f"Daily job {name} failed: {exc}")
+                logger.exception("Daily job %s failed", name)
+            else:
+                logger.info("Daily job %s finished", name)
 
-    return run
+        return handler
+
+    # The full-day run keeps its outcome summaries so the nightly pruning can
+    # classify what it collected; without them pruning refuses to discard
+    # anything, which is the safe direction but skips the day's retention.
+    carried: dict[str, object] = {}
+
+    def full_day(now: datetime) -> None:
+        report = jobs.run_outcomes_and_runners(state, now=now)
+        carried["summaries"] = report.summaries
+
+    def nightly(now: datetime) -> None:
+        summaries = carried.pop("summaries", None)
+        jobs.run_nightly(state, now=now, summaries=summaries)  # type: ignore[arg-type]
+
+    premarket_refs = tuple(
+        reference
+        for reference in state.config.outcomes.reference_times_et
+        if reference < state.config.schedules.jobs.premarket_outcomes
+    )
+
+    return {
+        "corporate_actions": guarded(
+            "corporate_actions", lambda now: jobs.run_corporate_actions(state, now=now)
+        ),
+        "premarket_outcomes": guarded(
+            "premarket_outcomes",
+            lambda now: jobs.run_outcomes_and_runners(
+                state, now=now, reference_times=premarket_refs
+            ),
+        ),
+        "daily_digest_push": guarded(
+            "daily_digest_push", lambda now: jobs.run_digest_push(state, now=now)
+        ),
+        "full_day_outcomes": guarded("full_day_outcomes", full_day),
+        "data_quality_and_compaction": guarded("data_quality_and_compaction", nightly),
+    }
