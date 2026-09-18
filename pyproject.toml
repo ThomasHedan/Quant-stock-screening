@@ -30,6 +30,8 @@ select = [
 ignore = [
     "ANN401",  # Any is occasionally the honest annotation at a boundary
     "B008",    # FastAPI Depends() in defaults is idiomatic
+    "RUF002",  # en dashes are intentional in prose docstrings
+    "RUF003",  # ... and in comments
 ]
 
 [tool.ruff.lint.per-file-ignores]
