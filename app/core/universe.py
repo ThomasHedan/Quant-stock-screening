@@ -17,10 +17,10 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import date, time
+from datetime import date, datetime, time
 
 from app.core.moves import Bar
-from app.core.timeutils import to_et
+from app.core.timeutils import to_et, to_utc
 from app.core.types import MarketSession
 
 logger = logging.getLogger(__name__)
@@ -107,6 +107,7 @@ def daily_rows(
     bars: list[Bar],
     bounds: dict[MarketSession, tuple[time, time]],
     *,
+    now: datetime,
     prev_close: float | None,
     reference: dict[str, object] | None = None,
     halt_count: int = 0,
@@ -122,6 +123,10 @@ def daily_rows(
     Always three rows, one per session, even when the stock never traded in
     one: the whole point of Tier 0 is that a question about any stock on any
     past day has an answer.
+
+    ``now`` is passed in rather than read here — the module stays clock-free —
+    and stamps ``written_at_utc``, which the lake schema requires on every row
+    so a value can always be traced to when it was recorded.
     """
     ref = reference or {}
     grouped = split_by_session(bars, bounds)
@@ -151,6 +156,7 @@ def daily_rows(
                 "halt_minutes": halt_minutes,
                 "suspect_price": suspect_price,
                 "ticker_canonical_id": ticker_canonical_id or ticker,
+                "written_at_utc": to_utc(now),
             }
         )
     return rows

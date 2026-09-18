@@ -11,6 +11,7 @@ from app.core.timeutils import ET, UTC
 from app.core.types import MarketSession
 
 DAY = date(2026, 3, 10)
+NOW = datetime(2026, 3, 10, 20, 15, tzinfo=UTC)
 BOUNDS = {
     MarketSession.PRE: (time(4, 0), time(9, 30)),
     MarketSession.REGULAR: (time(9, 30), time(16, 0)),
@@ -83,13 +84,13 @@ def test_rollup_of_zero_volume_bars_has_no_vwap():
 
 
 def test_every_ticker_day_gets_three_rows():
-    rows = universe.daily_rows("ABCD", DAY, [bar_at(8, 0)], BOUNDS, prev_close=9.0)
+    rows = universe.daily_rows("ABCD", DAY, [bar_at(8, 0)], BOUNDS, now=NOW, prev_close=9.0)
     assert len(rows) == 3
     assert {row["session"] for row in rows} == {"pre", "regular", "post"}
 
 
 def test_untraded_sessions_are_present_with_zero_volume():
-    rows = universe.daily_rows("ABCD", DAY, [bar_at(8, 0)], BOUNDS, prev_close=9.0)
+    rows = universe.daily_rows("ABCD", DAY, [bar_at(8, 0)], BOUNDS, now=NOW, prev_close=9.0)
     by_session = {row["session"]: row for row in rows}
     assert by_session["regular"]["volume"] == 0.0
     assert by_session["pre"]["volume"] == 1_000.0
@@ -101,6 +102,7 @@ def test_reference_fields_are_carried_onto_the_rows():
         DAY,
         [bar_at(8, 0)],
         BOUNDS,
+        now=NOW,
         prev_close=9.0,
         reference={
             "float_shares_outstanding": 4_100_000,
@@ -114,7 +116,7 @@ def test_reference_fields_are_carried_onto_the_rows():
 
 
 def test_integrity_flags_default_safely():
-    row = universe.daily_rows("ABCD", DAY, [], BOUNDS, prev_close=None)[0]
+    row = universe.daily_rows("ABCD", DAY, [], BOUNDS, now=NOW, prev_close=None)[0]
     assert row["split_flag"] is False
     assert row["suspect_price"] is False
     assert row["ticker_canonical_id"] == "ABCD"
@@ -126,6 +128,7 @@ def test_split_metadata_is_recorded():
         DAY,
         [],
         BOUNDS,
+        now=NOW,
         prev_close=10.0,
         split_flag=True,
         split_ratio=0.1,
