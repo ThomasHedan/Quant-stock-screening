@@ -1,0 +1,155 @@
+/*
+ * Mobile-first, light and dark, no framework.
+ *
+ * The visual language carries meaning rather than decoration: a pillar dot is
+ * filled, hollow or a question mark; a low-confidence float is dimmed; a
+ * fallback RVOL carries a tilde. Nothing on this screen should look more
+ * certain than the data behind it.
+ */
+
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --fg: #12171d;
+  --muted: #5b6672;
+  --line: #dfe4ea;
+  --up: #0a7d33;
+  --down: #b3261e;
+  --tier-a: #b3261e;
+  --tier-b: #a06000;
+  --tier-watch: #43506a;
+  --accent: #1f6feb;
+  --surface: #f6f8fa;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b0f14;
+    --fg: #e6edf3;
+    --muted: #93a1b0;
+    --line: #222b35;
+    --up: #3fb950;
+    --down: #f85149;
+    --tier-a: #f85149;
+    --tier-b: #d29922;
+    --tier-watch: #8b98a9;
+    --accent: #58a6ff;
+    --surface: #131a22;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 0 0 3rem;
+  background: var(--bg);
+  color: var(--fg);
+  font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+main { padding: 0 0.75rem; }
+h1 { font-size: 1.25rem; margin: 0.75rem 0 0.25rem; }
+h2 { font-size: 1rem; margin: 1.25rem 0 0.4rem; }
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  padding: 0.5rem 0.75rem;
+}
+
+.clocks { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: baseline; }
+.clock { font-variant-numeric: tabular-nums; }
+.countdown { color: var(--muted); font-size: 0.85rem; }
+
+.dots { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.35rem; }
+.dot {
+  font-size: 0.7rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+.dot.ok { border-color: var(--up); color: var(--up); }
+.dot.bad { border-color: var(--down); color: var(--down); }
+
+.warnings {
+  margin-top: 0.4rem;
+  padding: 0.4rem 0.5rem;
+  border-left: 3px solid var(--tier-b);
+  background: color-mix(in srgb, var(--tier-b) 10%, transparent);
+  font-size: 0.85rem;
+}
+
+nav { display: flex; gap: 0.9rem; margin-top: 0.5rem; overflow-x: auto; }
+nav a { color: var(--accent); text-decoration: none; white-space: nowrap; font-size: 0.9rem; }
+
+.meta { color: var(--muted); font-size: 0.85rem; margin: 0.35rem 0; }
+.empty { color: var(--muted); padding: 1rem 0; }
+
+table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+th, td { text-align: right; padding: 0.35rem 0.3rem; border-bottom: 1px solid var(--line); }
+th:first-child, td:first-child, .headline { text-align: left; }
+th { color: var(--muted); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
+
+.ticker { font-weight: 700; }
+.up { color: var(--up); }
+.down { color: var(--down); }
+.dim { color: var(--muted); }
+.caveat { color: var(--muted); }
+.caveat-note { color: var(--muted); font-size: 0.75rem; margin-top: 0.5rem; }
+
+.pillars { white-space: nowrap; letter-spacing: 0.1em; }
+.p-pass { color: var(--up); }
+.p-fail { color: var(--muted); }
+.p-unknown { color: var(--tier-b); font-weight: 700; }
+
+.tier { font-weight: 700; }
+tr.tier-A .tier { color: var(--tier-a); }
+tr.tier-B .tier { color: var(--tier-b); }
+tr.tier-watch .tier { color: var(--tier-watch); }
+
+.badge {
+  font-size: 0.65rem;
+  padding: 0 0.2rem;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.headline a { color: var(--accent); }
+
+.settings { display: grid; grid-template-columns: max-content 1fr; gap: 0.2rem 0.75rem; }
+.settings dt { color: var(--muted); }
+.settings dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+button {
+  font: inherit;
+  padding: 0.45rem 0.7rem;
+  margin: 0.2rem 0.3rem 0.2rem 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--fg);
+}
+button:active { background: var(--line); }
+
+.controls { display: flex; gap: 0.5rem; align-items: center; margin: 0.5rem 0; }
+input[type="date"] { font: inherit; padding: 0.3rem; background: var(--surface); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 6px; }
+
+footer {
+  margin-top: 2rem;
+  padding: 0.75rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+@media (min-width: 720px) {
+  main { max-width: 1100px; margin: 0 auto; }
+  table { font-size: 0.9rem; }
+}

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}History · Momentum Gap Scanner{% endblock %}
+{% block content %}
+<h1>History</h1>
+
+<form method="get" action="/history" class="controls">
+  <label for="day">Date</label>
+  <input type="date" id="day" name="day" value="{{ trade_date }}">
+  <button type="submit">Show</button>
+</form>
+
+{% if not alerts %}
+  <p class="empty">No alerts recorded on {{ trade_date }}. Every evaluation is still stored in
+    the research lake — the absence of an alert is itself data.</p>
+{% else %}
+<table class="history">
+  <thead>
+    <tr><th>Time</th><th>Ticker</th><th>Tier</th><th>Price</th><th>Gap</th><th>RVOL</th>
+        <th>Float</th><th>Pushed</th><th>Catalyst</th></tr>
+  </thead>
+  <tbody>
+  {% for alert in alerts %}
+    <tr class="tier-{{ alert.tier }}">
+      <td>{{ alert.created_at_utc[11:19] }}Z</td>
+      <td class="ticker">{{ alert.ticker }}</td>
+      <td class="tier">{{ alert.tier }}</td>
+      <td>{{ alert.price | num }}</td>
+      <td>{{ alert.gap_pct | pct }}</td>
+      <td title="source: {{ alert.rvol_source }}">{{ alert.rvol | num(1) }}</td>
+      <td>{{ alert.float_shares | num(1) }}</td>
+      <td>{{ "▲" if alert.pushed else "—" }}</td>
+      <td class="headline">{{ alert.headline or "—" }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

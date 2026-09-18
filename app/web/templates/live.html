@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Live · Momentum Gap Scanner{% endblock %}
+{% block content %}
+<h1>Live</h1>
+<p class="meta">
+  {% if in_window %}Inside an alert window — polling every 30 s.
+  {% else %}Outside alert windows — showing the last evaluated poll.{% endif %}
+</p>
+
+{# Polling rather than SSE: one small GET every 10 s is trivially debuggable
+   from a phone on a flaky connection, which SSE is not. #}
+<div hx-get="/api/live" hx-trigger="every 10s" hx-swap="outerHTML">
+  {% include "_live_table.html" %}
+</div>
+{% endblock %}

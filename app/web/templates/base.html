@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="auto">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>{% block title %}Momentum Gap Scanner{% endblock %}</title>
+  <link rel="manifest" href="/static/manifest.json">
+  <meta name="theme-color" content="#0b0f14">
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js" defer></script>
+</head>
+<body>
+<header class="app-header">
+  <div class="clocks">
+    <span class="clock"><b>{{ now_et }}</b> ET</span>
+    <span class="clock">{{ now_local }} {{ display_tz.split('/')[-1] }}</span>
+    {% if next_window_et %}
+      <span class="countdown" title="Next alert window">
+        next {{ next_window_et }} ET
+        {%- if next_window_in_minutes is not none %} (in {{ next_window_in_minutes | round(0) | int }} min){% endif %}
+      </span>
+    {% else %}
+      <span class="countdown">no window scheduled</span>
+    {% endif %}
+  </div>
+
+  <div class="dots">
+    {% for status in statuses %}
+      <span class="dot {{ 'ok' if status.healthy else 'bad' }}"
+            title="{{ status.name }} — {{ status.detail }}{% if status.age_seconds is not none %} ({{ status.age_seconds | round(0) | int }}s ago){% endif %}">
+        {{ status.name }}
+      </span>
+    {% endfor %}
+  </div>
+
+  {% if warnings %}
+    <div class="warnings" role="alert">
+      {% for warning in warnings %}<div>⚠ {{ warning }}</div>{% endfor %}
+    </div>
+  {% endif %}
+
+  <nav>
+    <a href="/">Live</a>
+    <a href="/runners">Missed Runners</a>
+    <a href="/history">History</a>
+    <a href="/research">Research</a>
+    <a href="/settings">Settings</a>
+  </nav>
+</header>
+
+<main>
+  {% block content %}{% endblock %}
+</main>
+
+<footer>
+  This tool screens stocks, records data and sends alerts. It does not provide financial advice,
+  and it never places orders.
+</footer>
+</body>
+</html>

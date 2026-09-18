@@ -1,0 +1,59 @@
+{# The fragment HTMX swaps every 10 seconds. Kept separate so a poll costs one
+   small response rather than a whole page. #}
+<div id="live-table">
+  <p class="meta">
+    {% if last_poll_et %}Last poll {{ last_poll_et }} ET{% else %}No poll yet today{% endif %}
+    · {{ rows | length }} rows
+  </p>
+
+  {% if not rows %}
+    <p class="empty">Nothing evaluated yet. Outside a window the collector still records the
+      market; alerts resume at the next window.</p>
+  {% else %}
+  <table class="live">
+    <thead>
+      <tr>
+        <th>Ticker</th><th>Price</th><th>Gap</th><th>Win</th><th>RVOL</th>
+        <th>Float</th><th>Pillars</th><th>Tier</th><th>Catalyst</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for row in rows %}
+      <tr class="tier-{{ row.tier }}">
+        <td class="ticker">
+          {{ row.ticker }}
+          {% if row.is_recent_runner %}<span class="badge runner" title="Ran recently">↺</span>{% endif %}
+          {% if row.pushed %}<span class="badge pushed" title="Pushed">▲</span>{% endif %}
+        </td>
+        <td>{{ row.price | num }}</td>
+        <td class="{{ 'up' if row.gap_pct and row.gap_pct > 0 else 'down' }}">{{ row.gap_pct | pct }}</td>
+        <td>{{ row.window_change_pct | pct }}</td>
+        <td title="source: {{ row.rvol_source }}">
+          {{ row.rvol | num(1) }}{% if row.rvol_source == 'fallback' %}<span class="caveat">~</span>{% endif %}
+        </td>
+        <td class="{{ 'dim' if row.float_confidence == 'low' else '' }}"
+            title="float confidence: {{ row.float_confidence }}">
+          {{ row.float_shares | num(1) }}
+        </td>
+        <td class="pillars">
+          {% for pillar in row.pillars %}<span class="p p-{{ pillar.status }}"
+              title="Pillar {{ pillar.number }}: {{ pillar.status }}{% if pillar.detail %} — {{ pillar.detail }}{% endif %}">{{ pillar.status | pillar }}</span>{% endfor %}
+        </td>
+        <td class="tier">{{ row.tier }}</td>
+        <td class="headline">
+          {% if row.headline %}
+            {% if row.news_url %}<a href="{{ row.news_url }}" rel="noopener noreferrer" target="_blank">{{ row.headline }}</a>
+            {% else %}{{ row.headline }}{% endif %}
+          {% else %}—{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="caveat-note">
+    RVOL marked <span class="caveat">~</span> comes from the fallback estimate, not a time-of-day
+    baseline. Greyed floats are low confidence, so pillar 5 shows <code>?</code> rather than a
+    verdict. Free volume data may not be fully consolidated.
+  </p>
+  {% endif %}
+</div>

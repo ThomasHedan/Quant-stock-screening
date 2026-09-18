@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Settings · Momentum Gap Scanner{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+
+<section>
+  <h2>Pillar thresholds</h2>
+  <p class="meta">What the scanner is applying right now. Edit <code>config.yaml</code> and
+     restart to change them; every threshold lives there, never in the code.</p>
+  <dl class="settings">
+    <dt>1 · Up on the day</dt><dd>gap ≥ {{ pillars.gap_pct_min }}%</dd>
+    <dt>2 · Relative volume</dt><dd>RVOL ≥ {{ pillars.rvol_min }} (time-of-day)</dd>
+    <dt>3 · News catalyst</dt><dd>published within {{ pillars.news_fresh_minutes }} min</dd>
+    <dt>4 · Price range</dt><dd>${{ pillars.price_min }} – ${{ pillars.price_max }}</dd>
+    <dt>5 · Float</dt><dd>&lt; {{ pillars.float_shares_max | num(1) }} shares</dd>
+  </dl>
+</section>
+
+<section>
+  <h2>Alerts</h2>
+  <dl class="settings">
+    <dt>Tier B pushes</dt><dd>{{ "on" if alerts.tier_b_push_enabled else "off" }}</dd>
+    <dt>Max pushes per window</dt><dd>{{ alerts.max_pushes_per_window }}</dd>
+    <dt>Daily digest</dt><dd>{{ "on" if alerts.daily_digest_enabled else "off" }}</dd>
+  </dl>
+</section>
+
+<section>
+  <h2>Notifications</h2>
+  {% if push_configured %}
+    <p class="meta">VAPID keys are configured.</p>
+    <button id="enable-push" type="button">Enable notifications on this device</button>
+    <button id="test-push" type="button">Send test notification</button>
+    <button id="disable-push" type="button">Disable on this device</button>
+    <p id="push-status" class="meta" role="status"></p>
+  {% else %}
+    <p class="empty">VAPID keys are missing. Generate a pair and set
+      <code>VAPID_PUBLIC_KEY</code>, <code>VAPID_PRIVATE_KEY</code> and
+      <code>VAPID_SUBJECT</code> in <code>.env</code>.</p>
+  {% endif %}
+
+  <p class="meta">
+    On iPhone, Web Push only works once this site is installed to the home screen: open it in
+    Safari, then Share → Add to Home Screen, and enable notifications from the installed app.
+  </p>
+</section>
+
+{% if push_configured %}
+<script type="module">
+  import { enablePush, disablePush, sendTestNotification, isStandalone, isSupported }
+    from '/static/push.js';
+
+  const status = document.getElementById('push-status');
+  const report = (message) => { status.textContent = message; };
+
+  if (!isSupported()) {
+    report('This browser does not support Web Push.');
+  } else if (/iPad|iPhone|iPod/.test(navigator.userAgent) && !isStandalone()) {
+    report('On iOS, add this site to your home screen first, then enable notifications there.');
+  }
+
+  document.getElementById('enable-push')?.addEventListener('click', async () => {
+    report('Requesting permission…');
+    try {
+      await enablePush({{ vapid_public_key | tojson }});
+      report('Notifications enabled on this device.');
+    } catch (error) {
+      report(`Could not enable notifications: ${error.message}`);
+    }
+  });
+
+  document.getElementById('test-push')?.addEventListener('click', async () => {
+    report('Sending…');
+    try {
+      const result = await sendTestNotification();
+      report(result.subscriptions === 0
+        ? 'No devices are subscribed yet — enable notifications first.'
+        : `Sent to ${result.delivered} of ${result.subscriptions} device(s).`);
+    } catch (error) {
+      report(`Test push failed: ${error.message}`);
+    }
+  });
+
+  document.getElementById('disable-push')?.addEventListener('click', async () => {
+    const removed = await disablePush();
+    report(removed ? 'Notifications disabled on this device.' : 'This device was not subscribed.');
+  });
+</script>
+{% endif %}
+{% endblock %}
