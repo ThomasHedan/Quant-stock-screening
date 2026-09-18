@@ -30,7 +30,7 @@ committed, tested and tagged (`step-00`, `step-01`, …).
 | 2 | Parquet lake writer, compaction, `reference` split, quality table | ✅ |
 | 3 | TradingView broad collector | ✅ |
 | 3b | Tier 0 daily universe, move metrics, pruning, retention | ✅ |
-| 3c | Integrity layer (corporate actions, halts, float confidence) | ⏳ |
+| 3c | Integrity layer (corporate actions, halts, float confidence) | ✅ |
 | 4 | Alpaca news listener + backfill | ⏳ |
 | 5 | Alert windows: pillars, tiering, evaluations | ⏳ |
 | 6 | Web Push | ⏳ |

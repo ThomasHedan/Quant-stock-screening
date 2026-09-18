@@ -222,3 +222,54 @@ and is driven by an explicit `now`.
 putting filter logic in `sources/tradingview.py`, which would have tied a
 threshold decision to one vendor and made it untestable without a fake
 response.
+
+---
+
+## 2026-09-18 — Halts are inferred only while the broad market is active
+
+**Context.** §6.4.3 infers a halt from zero trades for ≥3 consecutive minutes
+"during an active session while the broad market is trading". Alpaca's free
+tier omits empty minutes rather than emitting zero-volume bars, so silence and
+a halt look identical in the data.
+
+**Decision.** `infer_halts` takes an explicit `market_active` flag and returns
+nothing when it is false. The caller decides, from the market calendar and the
+clock, whether the broad market was trading.
+
+**Trade-off.** Genuine pre-market halts are not inferred. The alternative was
+worse by a wide margin: a thin small cap is routinely silent for twenty minutes
+before the open, so inferring there would mark most of pre-market as halted and
+make `spans_halt` useless as an exclusion filter.
+
+---
+
+## 2026-09-18 — Split ratios are stored as new-shares-per-old-share
+
+**Context.** Alpaca reports `old_rate` and `new_rate`; the lake stores a single
+`ratio`.
+
+**Decision.** `ratio = new_rate / old_rate`. A 1:10 reverse split is `0.1`
+(ten old shares become one), a 3-for-1 forward split is `3.0`. Prices are
+divided by the ratio and volumes multiplied by it.
+
+**Trade-off.** The convention has to be remembered when reading the table. It
+is the one that makes `is_reverse_split` a plain `ratio < 1` test and keeps the
+adjustment arithmetic in one direction.
+
+---
+
+## 2026-09-18 — Alpaca endpoints are unverified against the live API
+
+**Context.** As with TradingView, the egress policy blocks `api.alpaca.markets`
+and `data.alpaca.markets` from this build environment.
+
+**Decision.** The corporate-actions client is written against the documented
+v1 endpoint shape and fully tested against `httpx.MockTransport`, covering the
+page cursor, a retried 503 and an unretried 401. Field names in the response
+are parsed defensively: a record missing a date or symbol raises, and the rest
+of the page still parses.
+
+**Trade-off.** The first live run may show a differently named field. Still to
+verify on a networked machine: the exact `corporate_actions` response keys, and
+whether the free tier's 15-minute delay applies to this endpoint as it does to
+market data.
