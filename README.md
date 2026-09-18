@@ -26,8 +26,8 @@ committed, tested and tagged (`step-00`, `step-01`, …).
 | Step | Scope | State |
 |---|---|---|
 | 0 | Repo skeleton, `.gitignore`, ruff + pytest config | ✅ |
-| 1 | Config, SQLite, pure `core/` functions + tests | ⏳ |
-| 2 | Parquet lake writer, compaction, `reference` split, quality table | ⏳ |
+| 1 | Config, SQLite, pure `core/` functions + tests | ✅ |
+| 2 | Parquet lake writer, compaction, `reference` split, quality table | ✅ |
 | 3 | TradingView broad collector | ⏳ |
 | 3b | Tier 0 daily universe, move metrics, pruning, retention | ⏳ |
 | 3c | Integrity layer (corporate actions, halts, float confidence) | ⏳ |
@@ -54,7 +54,7 @@ committed, tested and tagged (`step-00`, `step-01`, …).
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"          # once packaging is wired up (step 1)
+pip install -r requirements-dev.txt
 
 cp .env.example .env             # then fill in your keys
 ```
