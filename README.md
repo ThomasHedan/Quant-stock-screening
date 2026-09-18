@@ -34,7 +34,7 @@ committed, tested and tagged (`step-00`, `step-01`, …).
 | 4 | Alpaca news listener + backfill | ✅ |
 | 5 | Alert windows: pillars, tiering, evaluations | ✅ |
 | 6 | Web Push | ⏳ |
-| 7 | Live / History / Settings pages | ⏳ |
+| 7 | Live / History / Settings pages | ✅ |
 | 8 | Alpaca bars: RVOL baseline, outcomes | ⏳ |
 | 9 | Runner detection, Missed Runners page | ⏳ |
 | 10 | Trade journal | ⏳ |
