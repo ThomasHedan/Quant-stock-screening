@@ -18,18 +18,18 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
-from app import journal, recent_runners
+from app import journal, recent_runners, research
 from app.alerts import Evaluation
 from app.core.timeutils import UTC, to_et, to_utc
 from app.core.types import PillarStatus, Tier
 from app.journal import JournalAction, JournalEntry
 from app.notify import push
 from app.runtime import RuntimeState
-from app.storage import db, lake
+from app.storage import db, lake, pruning
 
 logger = logging.getLogger(__name__)
 
@@ -331,22 +331,102 @@ def watchlist_remove(request: Request, payload: WatchlistPayload) -> JSONRespons
 
 
 @router.get("/research", response_class=HTMLResponse)
-def research_page(request: Request) -> HTMLResponse:
-    """Research — arrives with build-order step 11."""
+def research_page(
+    request: Request,
+    sql: str | None = None,
+    allow_holdout: bool = False,
+) -> HTMLResponse:
+    """Lake size, the holdout status and a read-only DuckDB query box."""
     state = state_of(request)
     now = datetime.now(tz=UTC)
+    root = state.config.storage.lake_path
+    limits = research.ResearchLimits(
+        timeout_seconds=state.config.research.sql_timeout_seconds,
+        row_cap=state.config.research.sql_row_cap,
+        holdout_fraction=state.config.research.holdout_fraction,
+    )
+    cutoff = research.cutoff_for(root, "evaluations", limits.holdout_fraction)
+
+    columns: list[str] = []
+    rows: list[tuple[Any, ...]] = []
+    error: str | None = None
+    if sql:
+        try:
+            columns, rows = research.run_query(
+                root, sql, limits=limits, cutoff=cutoff, allow_holdout=allow_holdout
+            )
+        except research.QueryRejectedError as exc:
+            error = str(exc)
+        except Exception as exc:
+            error = f"Query failed: {exc}"
+            logger.info("Research query failed: %s", exc)
+
+    stats = research.table_stats(root)
+    total_bytes = sum(stat.size_bytes for stat in stats)
+    limit_bytes = state.config.retention.max_lake_gb * 1024**3
     return templates().TemplateResponse(
         request,
-        "placeholder.html",
+        "research.html",
         {
-            "page_title": "Research",
-            "explanation": (
-                "The DuckDB query box, table downloads and the holdout guard land in build "
-                "step 11. The lake is already being written, so nothing is lost in the "
-                "meantime."
+            "sql": sql or "",
+            "allow_holdout": allow_holdout,
+            "columns": columns,
+            "rows": rows[:200],
+            "row_count": len(rows),
+            "row_cap": limits.row_cap,
+            "error": error,
+            "tables": [
+                {
+                    "name": stat.name,
+                    "size_mb": stat.size_mb,
+                    "days": stat.days,
+                    "first_day": stat.first_day,
+                    "last_day": stat.last_day,
+                }
+                for stat in stats
+            ],
+            "total_gb": total_bytes / 1024**3,
+            "max_lake_gb": state.config.retention.max_lake_gb,
+            "lake_pct": (total_bytes / limit_bytes * 100) if limit_bytes else 0.0,
+            "lake_warning": pruning.size_warning(
+                {stat.name: stat.size_bytes for stat in stats},
+                pruning.RetentionPolicy(
+                    bars_1m_raw_days=state.config.retention.bars_1m_raw_days,
+                    bars_1m_thinned_minutes=state.config.retention.bars_1m_thinned_minutes,
+                    snapshots_months=state.config.retention.snapshots_months,
+                    max_lake_gb=state.config.retention.max_lake_gb,
+                    warn_fraction=state.config.retention.lake_warn_fraction,
+                ),
             ),
+            "cutoff": research.describe_cutoff(cutoff, now=now),
+            "reweight_note": research.reweight_note(state.config.retention.control_sample_pct),
+            "examples": research.starter_queries(),
             **header_context(state, now=now),
         },
+    )
+
+
+@router.get("/api/research/export")
+def research_export(request: Request, sql: str, allow_holdout: bool = False) -> PlainTextResponse:
+    """Download a query result as CSV."""
+    state = state_of(request)
+    root = state.config.storage.lake_path
+    limits = research.ResearchLimits(
+        timeout_seconds=state.config.research.sql_timeout_seconds,
+        row_cap=state.config.research.sql_row_cap,
+        holdout_fraction=state.config.research.holdout_fraction,
+    )
+    cutoff = research.cutoff_for(root, "evaluations", limits.holdout_fraction)
+    try:
+        columns, rows = research.run_query(
+            root, sql, limits=limits, cutoff=cutoff, allow_holdout=allow_holdout
+        )
+    except research.QueryRejectedError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return PlainTextResponse(
+        research.to_csv(columns, rows),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="research.csv"'},
     )
 
 

@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Research · Momentum Gap Scanner{% endblock %}
+{% block content %}
+<h1>Research</h1>
+
+<section>
+  <h2>Lake</h2>
+  <p class="meta">{{ "%.2f"|format(total_gb) }} GB of {{ max_lake_gb }} GB
+     ({{ lake_pct | round(0) | int }}%).</p>
+  {% if lake_warning %}<p class="warnings">⚠ {{ lake_warning }}</p>{% endif %}
+  <table class="tables">
+    <thead><tr><th>Table</th><th>Size</th><th>Days</th><th>From</th><th>To</th></tr></thead>
+    <tbody>
+    {% for table in tables %}
+      <tr class="{{ 'dim' if table.days == 0 else '' }}">
+        <td class="ticker">{{ table.name }}</td>
+        <td>{{ "%.1f"|format(table.size_mb) }} MB</td>
+        <td>{{ table.days }}</td>
+        <td>{{ table.first_day or "—" }}</td>
+        <td>{{ table.last_day or "—" }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2>Holdout</h2>
+  <p class="meta">{{ cutoff }}</p>
+  <p class="caveat-note">
+    Testing fifty threshold combinations against a few hundred observations will throw up two or
+    three that look excellent by chance. Settle a rule on the earlier data, then test it on the
+    holdout exactly once.
+  </p>
+</section>
+
+<section>
+  <h2>Query</h2>
+  <p class="caveat-note">{{ reweight_note }}</p>
+
+  <form method="get" action="/research" class="query-form">
+    <textarea name="sql" rows="6" spellcheck="false"
+      placeholder="SELECT ticker, count(*) FROM evaluations GROUP BY 1 ORDER BY 2 DESC">{{ sql }}</textarea>
+    <label class="override">
+      <input type="checkbox" name="allow_holdout" value="true" {{ "checked" if allow_holdout }}>
+      Allow reading into the holdout (logged)
+    </label>
+    <button type="submit">Run</button>
+    {% if sql %}
+      <a class="download" href="/api/research/export?sql={{ sql | urlencode }}{{ '&allow_holdout=true' if allow_holdout else '' }}">
+        Download CSV
+      </a>
+    {% endif %}
+  </form>
+
+  {% if error %}
+    <p class="warnings" role="alert">{{ error }}</p>
+  {% elif columns %}
+    <p class="meta">
+      {{ row_count }} row(s){% if row_count >= row_cap %} — capped at {{ row_cap }}{% endif %};
+      showing up to 200.
+    </p>
+    <table class="results">
+      <thead><tr>{% for column in columns %}<th>{{ column }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for row in rows %}
+        <tr>{% for value in row %}<td>{{ value if value is not none else "—" }}</td>{% endfor %}</tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+
+  <h3>Start here</h3>
+  <ul class="examples">
+    {% for title, example in examples.items() %}
+      <li>
+        <form method="get" action="/research">
+          <input type="hidden" name="sql" value="{{ example }}">
+          <button type="submit">{{ title }}</button>
+        </form>
+      </li>
+    {% endfor %}
+  </ul>
+  <p class="caveat-note">
+    Descriptives before rules: when moves actually start, then each pillar's base rate on its
+    own, then how the pillars correlate — and only then joint rules (CLAUDE.md 6.8).
+  </p>
+</section>
+{% endblock %}

@@ -230,8 +230,97 @@ def test_navigation_links_all_resolve(client):
         assert client.get(path).status_code == 200, path
 
 
-def test_the_research_placeholder_says_what_is_coming(client):
-    assert "build step 11" in client.get("/research").text
+# --- research ----------------------------------------------------------------
+
+
+def test_research_page_reports_the_lake_and_the_holdout(client):
+    body = client.get("/research").text
+    assert "Holdout" in body
+    assert "GB of 25 GB" in body
+    assert "re-weight" in body or "weight them by" in body
+
+
+def test_research_page_offers_descriptive_starter_queries(client):
+    assert "When do moves actually start?" in client.get("/research").text
+
+
+def test_research_refuses_a_write_query(client):
+    body = client.get("/research", params={"sql": "DELETE FROM evaluations"}).text
+    assert "read-only" in body
+
+
+def test_research_reports_an_empty_lake_rather_than_crashing(client):
+    body = client.get("/research", params={"sql": "SELECT 1"}).text
+    assert "nothing has been collected yet" in body
+
+
+def test_research_runs_a_query_over_written_data(app, client):
+    from datetime import date
+
+    from app.storage import lake
+
+    state = app.state.runtime
+    day = date(2026, 3, 10)
+    writer = lake.LakeWriter(root=state.config.storage.lake_path, source="tradingview")
+    writer.append(
+        "evaluations",
+        day,
+        {
+            "ticker": "ABCD",
+            "date": day,
+            "poll_ts_utc": NOW,
+            "window_start_utc": NOW,
+            "pillar_1_status": "pass",
+            "pillar_2_status": "pass",
+            "pillar_3_status": "pass",
+            "pillar_4_status": "pass",
+            "pillar_5_status": "pass",
+            "pillars_passed": 5,
+            "pillars_unknown": 0,
+            "tier": "A",
+            "written_at_utc": NOW,
+        },
+    )
+    writer.flush(now=NOW)
+
+    body = client.get("/research", params={"sql": "SELECT ticker, tier FROM evaluations"}).text
+    assert "ABCD" in body
+    assert "1 row(s)" in body
+
+
+def test_research_csv_export(app, client):
+    from datetime import date
+
+    from app.storage import lake
+
+    state = app.state.runtime
+    day = date(2026, 3, 10)
+    writer = lake.LakeWriter(root=state.config.storage.lake_path, source="tradingview")
+    writer.append(
+        "runners",
+        day,
+        {
+            "ticker": "RUNNR",
+            "date": day,
+            "high_of_day_pct": 84.0,
+            "miss_reasons": ["OUTSIDE_WINDOW"],
+            "qualifying_rule": "high of day +84%",
+            "written_at_utc": NOW,
+        },
+    )
+    writer.flush(now=NOW)
+
+    response = client.get(
+        "/api/research/export", params={"sql": "SELECT ticker, high_of_day_pct FROM runners"}
+    )
+    assert response.status_code == 200
+    assert response.text.splitlines()[0] == "ticker,high_of_day_pct"
+    assert "RUNNR" in response.text
+
+
+def test_research_export_refuses_a_write_query(client):
+    response = client.get("/api/research/export", params={"sql": "DROP VIEW runners"})
+    assert response.status_code == 400
 
 
 # --- missed runners ----------------------------------------------------------

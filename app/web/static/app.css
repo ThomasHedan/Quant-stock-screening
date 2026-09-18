@@ -192,3 +192,21 @@ button.tap {
 .action-traded { color: var(--up); font-weight: 700; }
 .action-skipped { color: var(--muted); }
 .action-watched { color: var(--tier-watch); }
+
+/* Research ---------------------------------------------------------------- */
+
+.query-form textarea {
+  width: 100%;
+  font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 0.5rem;
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.query-form .override { display: block; margin: 0.4rem 0; font-size: 0.85rem; color: var(--muted); }
+.query-form .download { margin-left: 0.5rem; color: var(--accent); font-size: 0.85rem; }
+.results { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.75rem; }
+.examples { list-style: none; padding: 0; }
+.examples li { display: inline-block; }
+.tables td { font-variant-numeric: tabular-nums; }
