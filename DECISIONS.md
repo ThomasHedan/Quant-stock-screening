@@ -164,3 +164,61 @@ will need a one-off `git push --tags` from a machine without that restriction.
 
 **Trade-off.** Until then, step boundaries are visible in the log through the
 commit messages and this file rather than through `git tag -l` on the remote.
+
+---
+
+## 2026-09-18 — TradingView field names are unverified against the live endpoint
+
+**Context.** §6.4 asks that extended-hours behaviour and field availability be
+verified at build time. This build environment's egress policy blocks
+`scanner.tradingview.com` (the proxy returns 403), so no live response could be
+inspected.
+
+**Decision.** The column list in `app/sources/tradingview.py` is written against
+the documented `tradingview-screener` column names, and every assumption about
+it is enforced at runtime rather than trusted: a missing essential column
+(`name`, `close`, `volume`) raises `FieldDriftError` and fails the poll; a
+missing optional column is logged as an error, recorded on the poll result, and
+marks the affected pillar unknown; a positional-length mismatch between the
+requested columns and the returned values raises immediately.
+
+**Trade-off.** The first live run on the trader's machine may reveal a renamed
+column. It will fail loudly and name the column, which is the intended
+behaviour — the alternative, silently defaulting, is what this project exists
+to avoid. Still to verify on a machine with network access: that extended-hours
+Alpaca bars are returned (§5.3), and that `premarket_*` / `postmarket_*` columns
+populate as expected outside regular hours.
+
+---
+
+## 2026-09-18 — Float confidence from a snapshot tops out at `medium`
+
+**Context.** §6.4.4 derives `float_confidence` from turnover, the age of
+`float_asof`, and nullness. TradingView snapshots carry no as-of date for the
+float figure.
+
+**Decision.** The collector passes `float_asof=None`, so a plausible float earns
+`MEDIUM`, never `HIGH`. Only a source that supplies an as-of date can promote it.
+
+**Trade-off.** Pillar 5 still evaluates normally on `MEDIUM` (only `LOW` forces
+unknown), so this changes no alert today. It keeps the confidence label honest
+about what is actually known, and leaves `HIGH` meaningful for when a dated
+source is wired in.
+
+---
+
+## 2026-09-18 — `app/collector.py` and `app/core/collection.py`
+
+**Context.** §10's layout has sources, pure core modules and storage, but no
+home for the glue that turns a snapshot into lake rows, nor for the loose live
+filter.
+
+**Decision.** The filter is a pure module in `core/` (`collection.py`) because
+it is arithmetic over explicit inputs and deserves the same test discipline as
+the pillars. The glue is `app/collector.py`, which holds the window baselines
+and is driven by an explicit `now`.
+
+**Trade-off.** Two more modules than the spec's tree. The alternative was
+putting filter logic in `sources/tradingview.py`, which would have tied a
+threshold decision to one vendor and made it untestable without a fake
+response.
