@@ -32,7 +32,7 @@ committed, tested and tagged (`step-00`, `step-01`, …).
 | 3b | Tier 0 daily universe, move metrics, pruning, retention | ✅ |
 | 3c | Integrity layer (corporate actions, halts, float confidence) | ✅ |
 | 4 | Alpaca news listener + backfill | ✅ |
-| 5 | Alert windows: pillars, tiering, evaluations | ⏳ |
+| 5 | Alert windows: pillars, tiering, evaluations | ✅ |
 | 6 | Web Push | ⏳ |
 | 7 | Live / History / Settings pages | ⏳ |
 | 8 | Alpaca bars: RVOL baseline, outcomes | ⏳ |
