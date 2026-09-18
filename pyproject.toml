@@ -30,7 +30,8 @@ select = [
 ignore = [
     "ANN401",  # Any is occasionally the honest annotation at a boundary
     "B008",    # FastAPI Depends() in defaults is idiomatic
-    "RUF002",  # en dashes are intentional in prose docstrings
+    "RUF001",  # en dashes and typographic symbols are intentional in copy
+    "RUF002",  # ... and in docstrings
     "RUF003",  # ... and in comments
 ]
 
@@ -48,7 +49,12 @@ quote-style = "double"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q --strict-markers --strict-config"
-filterwarnings = ["error::DeprecationWarning:app.*"]
+filterwarnings = [
+    "error::DeprecationWarning:app.*",
+    # Starlette's TestClient warns about its own httpx usage; not ours to fix.
+    "ignore::DeprecationWarning:starlette.*",
+    "ignore:.*starlette.testclient.*:UserWarning",
+]
 markers = [
     "slow: tests that hit disk or build large synthetic datasets",
 ]
