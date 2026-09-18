@@ -20,6 +20,8 @@ from datetime import date, datetime, time
 from enum import StrEnum
 from zoneinfo import ZoneInfo
 
+from apscheduler.schedulers.background import BackgroundScheduler
+
 from app.config import AppConfig, TimeWindow
 from app.core.timeutils import et_datetime, et_trading_date, to_et, to_utc
 from app.market_calendar import MarketCalendar, log_next_windows
@@ -183,7 +185,7 @@ def start(
     daily_jobs: list[DailyJob],
     now: datetime,
     tick_seconds: int = 5,
-) -> object:
+) -> BackgroundScheduler:
     """Start APScheduler with the tick loop and the daily jobs.
 
     Returns the scheduler so the caller (the FastAPI lifespan) can shut it
@@ -191,7 +193,6 @@ def start(
     laptop that slept through 20:10 should still pull corporate actions when it
     wakes, because that table is what keeps split days out of the move metrics.
     """
-    from apscheduler.schedulers.background import BackgroundScheduler
     from apscheduler.triggers.cron import CronTrigger
     from apscheduler.triggers.interval import IntervalTrigger
 
