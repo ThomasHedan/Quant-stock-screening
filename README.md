@@ -28,7 +28,7 @@ committed, tested and tagged (`step-00`, `step-01`, …).
 | 0 | Repo skeleton, `.gitignore`, ruff + pytest config | ✅ |
 | 1 | Config, SQLite, pure `core/` functions + tests | ✅ |
 | 2 | Parquet lake writer, compaction, `reference` split, quality table | ✅ |
-| 3 | TradingView broad collector | ⏳ |
+| 3 | TradingView broad collector | ✅ |
 | 3b | Tier 0 daily universe, move metrics, pruning, retention | ⏳ |
 | 3c | Integrity layer (corporate actions, halts, float confidence) | ⏳ |
 | 4 | Alpaca news listener + backfill | ⏳ |
