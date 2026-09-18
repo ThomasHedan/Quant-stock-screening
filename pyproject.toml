@@ -39,6 +39,7 @@ ignore = [
 "tests/**" = [
     "S101",    # assert is the point of a test
     "S106",    # fake credentials in a redaction test are the point of that test
+    "S608",    # test SQL is built from constants in the test itself
     "ANN201",  # test functions returning None need no annotation noise
     "ANN001",
 ]

@@ -31,10 +31,11 @@ from app.core.collection import CollectionFilter
 from app.core.timeutils import UTC, et_trading_date, to_utc
 from app.logging_setup import configure as configure_logging
 from app.market_calendar import MarketCalendar
+from app.mock import MockDay, prev_closes
 from app.runtime import RuntimeState
 from app.scheduler import TickAction, TickPlan, plan_tick
 from app.sources.retry import RetryPolicy, SourceError
-from app.sources.tradingview import MockSnapshotSource, SnapshotResult, fetch_snapshot
+from app.sources.tradingview import SnapshotResult, fetch_snapshot
 from app.storage import db
 from app.storage.lake import LakeWriter
 from app.web import routes
@@ -92,7 +93,12 @@ def take_snapshot(state: RuntimeState, *, now: datetime) -> SnapshotResult | Non
     in the lake.
     """
     if state.secrets.mock_data:
-        return MockSnapshotSource().snapshot(now=now)
+        day = MockDay(day=et_trading_date(now))
+        # Seed the synthetic catalysts so pillar 3 can pass: without news in
+        # the cache, mock mode could never produce a tier A and the push path
+        # would go untested.
+        state.news.extend(day.news(now=now))
+        return day.snapshot(now=now)
     try:
         return fetch_snapshot(
             now=now,
@@ -145,7 +151,7 @@ def run_tick(state: RuntimeState, *, now: datetime) -> TickPlan:
             news_cache=state.news,
             rvol_for={},
             window_open_prices={},
-            prev_closes={},
+            prev_closes=prev_closes(MockDay(day=day)) if state.secrets.mock_data else {},
             push_state=state.push_state,
         )
         state.record_poll(run.evaluations, now=now)
