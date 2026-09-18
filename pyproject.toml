@@ -66,6 +66,7 @@ module = [
     "pywebpush.*",
     "tradingview_screener.*",
     "duckdb.*",
-    "pyarrow.*",   # ships no py.typed marker
+    "pyarrow.*",      # ships no py.typed marker
+    "apscheduler.*",  # same
 ]
 ignore_missing_imports = true
