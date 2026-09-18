@@ -295,6 +295,18 @@ def run_window_poll(
     return run
 
 
+def alert_id_for(evaluation: Evaluation) -> str:
+    """A stable id for one (ticker, window, tier) alert.
+
+    Deterministic rather than a UUID so the journal can reference an alert the
+    trader tapped on, and so replaying a window does not create a second row
+    for the same alert.
+    """
+    day = et_trading_date(evaluation.poll_ts_utc)
+    window = to_utc(evaluation.window_start_utc).strftime("%H%M")
+    return f"{day.isoformat()}-{window}-{evaluation.ticker}-{evaluation.tier.value}"
+
+
 def evaluation_row(evaluation: Evaluation, *, now: datetime) -> LakeRow:
     """Build the ``evaluations`` lake row for one verdict.
 

@@ -458,3 +458,36 @@ def test_live_rows_carry_one_tap_journal_buttons(app, client):
     body = client.get("/api/live").text
     assert 'data-journal="traded"' in body
     assert 'data-journal="skipped"' in body
+
+
+def test_history_shows_an_alert_the_pipeline_recorded(app, client):
+    """The History page was reading a table nothing ever wrote to."""
+    from datetime import date
+
+    from app.storage import db
+
+    state = app.state.runtime
+    day = date(2026, 3, 10)
+    with db.session(state.sqlite_path) as connection:
+        db.record_alert(
+            connection,
+            db.AlertRecord(
+                alert_id="2026-03-10-0800-ABCD-A",
+                ticker="ABCD",
+                trade_date=day,
+                window_start_utc=NOW,
+                tier="A",
+                price=5.20,
+                gap_pct=34.0,
+                rvol=12.0,
+                rvol_source="baseline",
+                float_shares=4_100_000,
+                headline="Phase 3 data beats endpoint",
+                pushed=True,
+            ),
+            now=NOW,
+        )
+    body = client.get("/history?day=2026-03-10").text
+    assert "ABCD" in body
+    assert "Phase 3 data" in body
+    assert "+34.0%" in body

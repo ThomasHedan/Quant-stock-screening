@@ -191,15 +191,7 @@ def history_page(request: Request, day: str | None = None) -> HTMLResponse:
     now = datetime.now(tz=UTC)
     trade_date = day or to_et(now).date().isoformat()
     with db.session(state.sqlite_path) as connection:
-        rows = connection.execute(
-            """
-            SELECT alert_id, ticker, tier, price, gap_pct, rvol, rvol_source,
-                   float_shares, headline, pushed, created_at_utc, window_start_utc
-            FROM alerts WHERE trade_date = ?
-            ORDER BY created_at_utc DESC
-            """,
-            (trade_date,),
-        ).fetchall()
+        rows = db.alerts_for_day(connection, date.fromisoformat(trade_date))
     return templates().TemplateResponse(
         request,
         "history.html",

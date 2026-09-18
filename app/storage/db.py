@@ -16,7 +16,8 @@ import logging
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import date, datetime
 from pathlib import Path
 
 from app.core.timeutils import to_utc
@@ -182,6 +183,85 @@ def utc_text(value: datetime) -> str:
 def read_utc(value: str) -> datetime:
     """Parse a timestamp written by :func:`utc_text` back into UTC."""
     return to_utc(datetime.fromisoformat(value))
+
+
+@dataclass(frozen=True, slots=True)
+class AlertRecord:
+    """One alert as the History page shows it.
+
+    Separate from the lake's ``evaluations`` row on purpose: the lake keeps
+    every evaluation for research, while this table keeps only what actually
+    alerted, which is what the trader scrolls back through.
+    """
+
+    alert_id: str
+    ticker: str
+    trade_date: date
+    window_start_utc: datetime
+    tier: str
+    price: float | None = None
+    gap_pct: float | None = None
+    rvol: float | None = None
+    rvol_source: str | None = None
+    float_shares: int | None = None
+    headline: str | None = None
+    pushed: bool = False
+    push_reason: str | None = None
+
+
+def record_alert(connection: sqlite3.Connection, alert: AlertRecord, *, now: datetime) -> None:
+    """Insert or refresh one alert.
+
+    Upsert on ``alert_id`` so a window replayed after a restart updates the row
+    rather than duplicating it — the History page should show one line per
+    alert, not one per poll that produced it.
+    """
+    connection.execute(
+        """
+        INSERT INTO alerts
+            (alert_id, ticker, trade_date, window_start_utc, tier, price, gap_pct, rvol,
+             rvol_source, float_shares, headline, pushed, push_reason, created_at_utc)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT (alert_id) DO UPDATE SET
+            price = excluded.price,
+            gap_pct = excluded.gap_pct,
+            rvol = excluded.rvol,
+            rvol_source = excluded.rvol_source,
+            float_shares = excluded.float_shares,
+            headline = excluded.headline,
+            pushed = alerts.pushed OR excluded.pushed,
+            push_reason = excluded.push_reason
+        """,
+        (
+            alert.alert_id,
+            alert.ticker,
+            alert.trade_date.isoformat(),
+            utc_text(alert.window_start_utc),
+            alert.tier,
+            alert.price,
+            alert.gap_pct,
+            alert.rvol,
+            alert.rvol_source,
+            alert.float_shares,
+            alert.headline,
+            int(alert.pushed),
+            alert.push_reason,
+            utc_text(now),
+        ),
+    )
+
+
+def alerts_for_day(connection: sqlite3.Connection, day: date) -> list[sqlite3.Row]:
+    """Alerts recorded on one trading day, newest first."""
+    return list(
+        connection.execute(
+            """
+            SELECT * FROM alerts WHERE trade_date = ?
+            ORDER BY created_at_utc DESC, alert_id DESC
+            """,
+            (day.isoformat(),),
+        ).fetchall()
+    )
 
 
 def get_setting(connection: sqlite3.Connection, key: str, default: str | None = None) -> str | None:

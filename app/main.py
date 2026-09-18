@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager, suppress
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -29,6 +29,7 @@ from app.collector import snapshot_rows
 from app.config import AppConfig, get_secrets, load_config
 from app.core.collection import CollectionFilter
 from app.core.timeutils import UTC, et_trading_date, to_utc
+from app.core.types import Tier
 from app.logging_setup import configure as configure_logging
 from app.market_calendar import MarketCalendar
 from app.mock import MockDay, prev_closes
@@ -160,6 +161,7 @@ def run_tick(state: RuntimeState, *, now: datetime) -> TickPlan:
             day,
             [alert_pipeline.evaluation_row(e, now=now) for e in run.evaluations],
         )
+        _persist_alerts(state, run.evaluations, day=day, now=now)
 
     if state.baselines is None:
         state.open_window(now)
@@ -238,6 +240,48 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     routes.configure(Jinja2Templates(directory=WEB_DIR / "templates"))
     app.include_router(routes.router)
     return app
+
+
+def _persist_alerts(
+    state: RuntimeState,
+    evaluations: list[alert_pipeline.Evaluation],
+    *,
+    day: date,
+    now: datetime,
+) -> None:
+    """Write the alerting rows to SQLite for the History page.
+
+    Only tiers A and B are recorded here. Watch-tier rows and everything below
+    stay in the lake's ``evaluations`` table: History answers "what did it
+    alert on?", and folding every near-miss into it would bury the answer.
+    """
+    alerting = [e for e in evaluations if e.tier in (Tier.A, Tier.B)]
+    if not alerting:
+        return
+    with db.session(state.sqlite_path) as connection:
+        for evaluation in alerting:
+            db.record_alert(
+                connection,
+                db.AlertRecord(
+                    alert_id=alert_pipeline.alert_id_for(evaluation),
+                    ticker=evaluation.ticker,
+                    trade_date=day,
+                    window_start_utc=evaluation.window_start_utc,
+                    tier=evaluation.tier.value,
+                    price=evaluation.price,
+                    gap_pct=evaluation.gap_pct,
+                    rvol=evaluation.rvol,
+                    rvol_source=evaluation.rvol_source.value,
+                    float_shares=evaluation.float_shares,
+                    headline=evaluation.news.headline if evaluation.news else None,
+                    pushed=evaluation.pushed,
+                    push_reason=(
+                        evaluation.push_decision.reason if evaluation.push_decision else None
+                    ),
+                ),
+                now=now,
+            )
+    logger.info("Recorded %s alert(s) for %s", len(alerting), day)
 
 
 def _tick(state: RuntimeState, now: datetime) -> None:

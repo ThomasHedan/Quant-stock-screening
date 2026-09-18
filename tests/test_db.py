@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pytest
 from app.core.timeutils import UTC
 from app.storage import db
+
+DAY = date(2026, 3, 10)
 
 NOW = datetime(2026, 3, 10, 12, 5, tzinfo=UTC)
 
@@ -99,3 +101,54 @@ def test_utc_text_rejects_naive():
 
     with pytest.raises(NaiveDatetimeError):
         db.utc_text(datetime(2026, 3, 10, 12, 5))  # noqa: DTZ001
+
+
+# --- alerts ------------------------------------------------------------------
+
+
+def alert(alert_id: str = "2026-03-10-0800-ABCD-A", **overrides: object) -> db.AlertRecord:
+    base = {
+        "alert_id": alert_id,
+        "ticker": "ABCD",
+        "trade_date": DAY,
+        "window_start_utc": NOW,
+        "tier": "A",
+        "price": 5.20,
+        "gap_pct": 34.0,
+        "rvol": 12.0,
+        "rvol_source": "baseline",
+        "float_shares": 4_100_000,
+        "headline": "Phase 3 data",
+        "pushed": True,
+        "push_reason": "first A alert for ABCD",
+    }
+    return db.AlertRecord(**{**base, **overrides})
+
+
+def test_alerts_round_trip(connection):
+    db.record_alert(connection, alert(), now=NOW)
+    rows = db.alerts_for_day(connection, DAY)
+    assert len(rows) == 1
+    assert rows[0]["ticker"] == "ABCD"
+    assert rows[0]["pushed"] == 1
+
+
+def test_replaying_a_window_updates_rather_than_duplicates(connection):
+    """History shows one line per alert, not one per poll that produced it."""
+    db.record_alert(connection, alert(price=5.20), now=NOW)
+    db.record_alert(connection, alert(price=6.40), now=NOW + timedelta(seconds=30))
+    rows = db.alerts_for_day(connection, DAY)
+    assert len(rows) == 1
+    assert rows[0]["price"] == 6.40
+
+
+def test_a_push_flag_is_never_cleared_by_a_later_poll(connection):
+    """The push happened; a later suppressed poll must not rewrite history."""
+    db.record_alert(connection, alert(pushed=True), now=NOW)
+    db.record_alert(connection, alert(pushed=False), now=NOW + timedelta(seconds=30))
+    assert db.alerts_for_day(connection, DAY)[0]["pushed"] == 1
+
+
+def test_alerts_are_scoped_by_day(connection):
+    db.record_alert(connection, alert(), now=NOW)
+    assert db.alerts_for_day(connection, date(2026, 3, 11)) == []
