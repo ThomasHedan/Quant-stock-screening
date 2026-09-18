@@ -68,14 +68,21 @@ class MockDay:
         """Fresh catalysts for the perfect setups, stale ones elsewhere.
 
         The perfect setups get news two minutes old so pillar 3 passes at any
-        poll; the near-miss runner gets news from six hours ago so the
-        ``NEWS_STALE`` path is exercised too.
+        poll, with a fresh article every ten minutes; the near-miss runner gets
+        one article from six hours ago, so the ``NEWS_STALE`` path is exercised
+        too.
         """
         fresh = to_utc(now) - timedelta(minutes=2)
         stale = to_utc(now) - timedelta(hours=6)
+        # The id carries a ten-minute bucket so a *new* article arrives
+        # periodically. With one id per day the cache would deduplicate every
+        # later poll, the single article would age past the freshness window,
+        # and mock mode could never produce a tier A again after ten minutes —
+        # which looks exactly like a bug in the pillar-3 check.
+        bucket = to_utc(now).strftime("%H%M")[:3]
         items = [
             NewsItem(
-                news_id=f"mock-{ticker}-{self.day}",
+                news_id=f"mock-{ticker}-{self.day}-{bucket}",
                 symbols=(ticker,),
                 headline=f"{ticker} announces positive Phase 3 topline results",
                 source="benzinga",
@@ -87,7 +94,7 @@ class MockDay:
         ]
         items.append(
             NewsItem(
-                news_id=f"mock-{NEAR_MISS_RUNNER}-{self.day}",
+                news_id=f"mock-{NEAR_MISS_RUNNER}-{self.day}",  # stale by design, one per day
                 symbols=(NEAR_MISS_RUNNER,),
                 headline=f"{NEAR_MISS_RUNNER} prices public offering",
                 source="benzinga",

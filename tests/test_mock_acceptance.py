@@ -261,3 +261,16 @@ def test_the_synthetic_market_contains_names_that_went_nowhere(mock_day):
 def test_some_mock_names_have_no_float_data(mock_day):
     rows = mock_day.snapshot(now=POLL).rows
     assert any(row.float_shares is None for row in rows)
+
+
+def test_a_fresh_catalyst_keeps_arriving_through_the_session(mock_day):
+    """One article per day would let tier A vanish ten minutes into a window."""
+    early = mock_day.news(now=POLL)
+    later = mock_day.news(now=POLL + timedelta(minutes=30))
+    assert {item.news_id for item in early} != {item.news_id for item in later}
+    assert all((later[0].created_at - POLL).total_seconds() > 0 for _ in [0])
+
+
+def test_tier_a_is_still_reachable_later_in_the_session(mock_day, thresholds, weights):
+    run = run_poll(mock_day, thresholds, weights, now=POLL + timedelta(minutes=30))
+    assert any(e.tier is Tier.A for e in run.evaluations)
