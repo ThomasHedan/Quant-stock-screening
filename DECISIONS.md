@@ -304,3 +304,52 @@ rejected query with a clear message.
 statement, which is exactly the granularity wanted here (one connection per
 request). Without it, one careless join over a year of snapshots would hold the
 page open indefinitely.
+
+---
+
+## 2026-09-18 — Move metrics for non-scoped tickers come from the snapshots
+
+**Context.** §6.3 computes move metrics "from Tier 0 and bars", and §6.5 scopes
+the bar fetch to a few hundred tickers. Tier 0 is written from those same bars,
+so on a real day the collector keeps several hundred tickers for which neither
+source exists — and `prune_day` keeps anything it cannot classify.
+
+Observed while driving a full synthetic day through the app: pruning kept
+1350 of 1350 snapshot rows, drew no control sample and wrote no
+`pruned_summary` rows. That is the 23 MB/day raw Tier 1 figure the pruning
+design exists to avoid, roughly 6x the §6.3b budget, and it silently disables
+the control group that §6.0 is built on.
+
+**Decision.** For tickers with no bars, the day's move metrics are derived from
+the snapshot price path: `day_high`/`day_low` from the polled prices,
+`max_runup_pct` from the same series, and `up_move_pct`/`down_move_pct` against
+a `prev_close` that still comes from the adjusted bar source — never from the
+snapshots (§6.4.1). Bar-derived summaries always take precedence.
+
+**Trade-off.** A 60-second sample cannot see a wick, so these figures
+understate fast spikes. For a *retention* decision that is the safe direction:
+understating a move keeps a row in the control sample rather than discarding a
+mover. The same figures are not used for research labels — `outcomes` and
+`runners` are computed from bars only, for the scoped set.
+
+---
+
+## 2026-09-18 — Previous closes fall back to a batched bar fetch
+
+**Context.** The nightly job reads `prev_close` from the previous day's Tier 0
+partition. On the first day of operation, and for any ticker not in yesterday's
+scope, that partition has no row.
+
+Observed in the same run: with no previous close, `gap_pct` and the
+high-of-day runner rule cannot be evaluated, and the job found zero runners
+while the underlying bars clearly contained three.
+
+**Decision.** `previous_closes` tries yesterday's Tier 0 row first, then falls
+back to one batched fetch of the previous trading day's regular session from
+the same split-adjusted bar source. Tickers with neither are logged by name and
+count.
+
+**Trade-off.** One extra batched Alpaca call per night, and on day one it
+covers the whole collected set rather than a handful. Deriving the figure from
+the snapshots instead would have cost nothing and been wrong on exactly the
+days that matter most — split days.

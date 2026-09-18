@@ -33,7 +33,7 @@ from app.core.integrity import (
     halt_summary,
     infer_halts,
 )
-from app.core.moves import Bar
+from app.core.moves import Bar, MoveMetrics
 from app.core.timeutils import et_datetime, et_trading_date, to_utc
 from app.core.types import MarketSession, Tier
 from app.recent_runners import RecentRunner
@@ -329,6 +329,12 @@ def run_outcomes_and_runners(
                 )
             )
 
+    # The collector keeps far more tickers than the bar scope; without metrics
+    # for those, the nightly pruning would keep every row it collected.
+    state.lake.flush(now=now)
+    broad_closes = previous_closes(state, _collected_tickers(state, day), day, now=now)
+    summaries.update(summaries_from_snapshots(state, day, broad_closes, exclude=set(summaries)))
+
     _update_watchlist(state, runner_records, day=day)
     logger.info(
         "Outcomes for %s: %s tickers, %s bar rows, %s outcome rows, %s runners",
@@ -351,6 +357,100 @@ def run_outcomes_and_runners(
         inferred_halt_count=inferred_total,
         summaries=summaries,
     )
+
+
+def summaries_from_snapshots(
+    state: RuntimeState,
+    day: date,
+    closes: dict[str, float],
+    *,
+    exclude: set[str],
+) -> dict[str, TickerDaySummary]:
+    """Move metrics for the collected tickers that never got bars.
+
+    The bar fetch is deliberately scoped to a few hundred names (CLAUDE.md
+    6.5), but the collector keeps several hundred more — and without metrics
+    for those, pruning cannot classify them, so it keeps everything. That
+    quietly turns the 4 MB/day Tier 1 budget into the 23 MB/day raw figure the
+    pruning design exists to avoid, and the control sample is never drawn at
+    all.
+
+    So for those tickers the metrics come from the snapshot price path itself.
+    It is cruder than bars — a 60-second sample cannot see a wick — and so it
+    will understate a fast spike. That is the safe direction for a *retention*
+    decision: understating a move keeps a row in the control sample rather than
+    discarding a mover. ``prev_close`` still comes from the adjusted bar
+    source, never from the snapshots (6.4.1).
+    """
+    table = lake.read_day(state.config.storage.lake_path, "snapshots", day)
+    if table.num_rows == 0:
+        return {}
+
+    by_ticker: dict[str, list[lake.LakeRow]] = {}
+    for row in table.to_pylist():
+        ticker = str(row["ticker"])
+        if ticker in exclude:
+            continue
+        by_ticker.setdefault(ticker, []).append(row)
+
+    summaries: dict[str, TickerDaySummary] = {}
+    for ticker, rows in by_ticker.items():
+        ordered = sorted(rows, key=lambda row: to_utc(row["poll_ts_utc"]))
+        prices = [float(row["price"]) for row in ordered if row.get("price") is not None]
+        if not prices:
+            continue
+        prev_close = closes.get(ticker)
+        high, low = max(prices), min(prices)
+
+        def against(value: float, base: float | None = prev_close) -> float | None:
+            return None if base is None or base <= 0 else (value / base - 1.0) * 100.0
+
+        runup: float | None = None
+        lowest = prices[0]
+        for price in prices:
+            lowest = min(lowest, price)
+            if lowest > 0:
+                candidate = (price / lowest - 1.0) * 100.0
+                runup = candidate if runup is None else max(runup, candidate)
+
+        gaps = [row["gap_pct"] for row in ordered if row.get("gap_pct") is not None]
+        rvols = [row["rvol"] for row in ordered if row.get("rvol") is not None]
+        volumes = [
+            row["session_volume"] for row in ordered if row.get("session_volume") is not None
+        ]
+
+        summaries[ticker] = TickerDaySummary(
+            ticker=ticker,
+            metrics=MoveMetrics(
+                up_move_pct=against(high),
+                down_move_pct=against(low),
+                max_runup_pct=runup,
+                day_high=high,
+                day_low=low,
+                session_close=prices[-1],
+            ),
+            best_tier=_best_tier(state, ticker, day),
+            poll_count=len(ordered),
+            first_poll_ts_utc=to_utc(ordered[0]["poll_ts_utc"]),
+            last_poll_ts_utc=to_utc(ordered[-1]["poll_ts_utc"]),
+            session_volume=max(volumes) if volumes else None,
+            last_price=prices[-1],
+            max_gap_pct=max(gaps) if gaps else None,
+            max_rvol=max(rvols) if rvols else None,
+        )
+
+    logger.info(
+        "Derived snapshot move metrics for %s ticker(s) on %s that had no bars",
+        len(summaries),
+        day,
+    )
+    return summaries
+
+
+def _collected_tickers(state: RuntimeState, day: date) -> tuple[str, ...]:
+    """Every ticker with a snapshot on the day."""
+    table = lake.read_day(state.config.storage.lake_path, "snapshots", day)
+    return tuple(sorted({str(row["ticker"]) for row in table.to_pylist()}))
 
 
 def _actions_for(state: RuntimeState, day: date) -> list[CorporateAction]:

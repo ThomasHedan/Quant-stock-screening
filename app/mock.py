@@ -235,10 +235,18 @@ class MockDay:
 
 
 def prev_closes(day: MockDay) -> dict[str, float]:
-    """Previous closes consistent with the synthetic gaps."""
+    """Previous closes consistent with the synthetic gaps.
+
+    The quiet filler names are included as well as the runners. Without them
+    the nightly pruning has no gap figure for most of the collected market and
+    classifies it on run-up alone, so mock mode would exercise a narrower path
+    than production ever takes.
+    """
     return {
         **{ticker: 3.88 for ticker in PERFECT_SETUPS},
         EARLY_RUNNER: 4.00,
         NEAR_MISS_RUNNER: 6.00,
         ILLIQUID_RUNNER: 10.00,
+        # Mirrors the filler prices in MockDay._filler: flat against yesterday.
+        **{f"MK{index:03d}": round(3.0 + index * 0.4, 2) for index in range(40)},
     }

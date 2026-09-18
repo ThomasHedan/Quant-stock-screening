@@ -425,3 +425,67 @@ def test_a_23m_float_runner_is_diagnosed_through_the_job(state):
     assert "FAILED_PILLAR" in (near["miss_reasons"] or [])
     assert "NEAR_MISS" in (near["miss_reasons"] or [])
     assert "23.0M" in (near["miss_detail"] or "")
+
+
+# --- move metrics for the broad collected set -------------------------------
+
+
+def test_pruning_actually_prunes_after_a_collected_day(state):
+    """Without snapshot-derived metrics the nightly job kept every row."""
+    collect_a_window(state)
+    root = state.config.storage.lake_path
+    before = lake.row_count(root, "snapshots", DAY)
+
+    outcomes_report = jobs.run_outcomes_and_runners(state, now=EVENING)
+    report = jobs.run_nightly(state, now=NIGHT, summaries=outcomes_report.summaries)
+
+    assert report.prune is not None
+    assert report.prune.dropped_count > 0
+    assert lake.row_count(root, "snapshots", DAY) < before
+    assert lake.row_count(root, "pruned_summary", DAY) == report.prune.dropped_count
+
+
+def test_the_control_sample_is_drawn_from_the_broad_set(state):
+    collect_a_window(state)
+    outcomes_report = jobs.run_outcomes_and_runners(state, now=EVENING)
+    report = jobs.run_nightly(state, now=NIGHT, summaries=outcomes_report.summaries)
+    assert report.prune is not None
+    assert report.prune.control_count > 0
+
+    kept = lake.read_day(state.config.storage.lake_path, "snapshots", DAY).to_pylist()
+    assert {row["retention_class"] for row in kept} >= {"mover", "control"}
+
+
+def test_snapshot_metrics_cover_the_tickers_that_never_got_bars(state):
+    collect_a_window(state)
+    report = jobs.run_outcomes_and_runners(state, now=EVENING)
+    # The bar scope is a handful of names; the collector kept far more.
+    assert len(report.summaries) > len(report.tickers_fetched)
+    assert any(ticker.startswith("MK0") for ticker in report.summaries)
+
+
+def test_snapshot_metrics_use_the_adjusted_previous_close(state):
+    """prev_close must never come from the snapshots themselves (6.4.1)."""
+    collect_a_window(state)
+    closes = jobs.previous_closes(state, ("MK001",), DAY, now=EVENING)
+    summaries = jobs.summaries_from_snapshots(state, DAY, closes, exclude=set())
+    summary = summaries["MK001"]
+    assert summary.metrics.up_move_pct is not None
+    assert summary.metrics.day_high is not None
+
+
+def test_snapshot_metrics_are_absent_without_a_previous_close(state):
+    """No reference price means no move figure — never a fabricated zero."""
+    collect_a_window(state)
+    summaries = jobs.summaries_from_snapshots(state, DAY, {}, exclude=set())
+    assert summaries
+    assert all(summary.metrics.up_move_pct is None for summary in summaries.values())
+    # Run-up needs no reference price, so it is still computed.
+    assert any(summary.metrics.max_runup_pct is not None for summary in summaries.values())
+
+
+def test_bar_derived_metrics_win_over_snapshot_derived_ones(state):
+    collect_a_window(state)
+    closes = jobs.previous_closes(state, ("MKAAA",), DAY, now=EVENING)
+    summaries = jobs.summaries_from_snapshots(state, DAY, closes, exclude={"MKAAA"})
+    assert "MKAAA" not in summaries
