@@ -117,3 +117,50 @@ rescaled, rather than substituting a rank of zero.
 comparable. Substituting zero was worse: it would push exactly the newest,
 fastest-moving names to the bottom of the table, which is the opposite of what
 the ranking exists for. Rows record which components were present.
+
+---
+
+## 2026-09-18 — Two modules beyond the §10 layout: `schemas.py`, `reference.py`
+
+**Context.** §10 lists `storage/lake.py`, `storage/db.py`, `storage/quality.py`.
+Two concerns did not fit cleanly in any of them.
+
+**Decision.** `storage/schemas.py` holds the Arrow schema of every lake table,
+and `storage/reference.py` holds the change-only writer and the point-in-time
+join for slow-moving fields.
+
+**Trade-off.** Two files more than the spec's layout. The alternative was a
+single `lake.py` of roughly 900 lines mixing table definitions, buffering,
+compaction and join semantics. Schemas in particular earn their own file: they
+are the documentation a DuckDB query needs months from now, and `NEVER_PRUNED`
+sits next to them so the retention exclusion list cannot drift from the tables
+it protects.
+
+---
+
+## 2026-09-18 — `market_cap` is excluded from reference change detection
+
+**Context.** §6.3a lists `sector`, `industry`, float and average-volume fields
+as the slow-moving ones written change-only. `market_cap` is stored on the same
+rows.
+
+**Decision.** `market_cap` is written on each reference row but is *not* part
+of the comparison that decides whether to write one.
+
+**Trade-off.** Market cap is only as fresh as the last row some other field
+triggered. Including it would have produced a reference row on every poll,
+which is exactly the duplication the snapshots/reference split exists to
+remove — and market cap is derivable from price × shares outstanding anyway.
+
+---
+
+## 2026-09-18 — Step tags are local only
+
+**Context.** §1.2 requires a `step-NN` tag per completed step. This
+environment's git proxy rejects tag pushes (HTTP 403); branch pushes succeed.
+
+**Decision.** Tags are created locally at each step boundary as specified. They
+will need a one-off `git push --tags` from a machine without that restriction.
+
+**Trade-off.** Until then, step boundaries are visible in the log through the
+commit messages and this file rather than through `git tag -l` on the remote.
